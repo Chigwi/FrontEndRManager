@@ -12,9 +12,9 @@ app.get('/api/test', (req, res) => {
 
 // Add this before app.listen()
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/admin.html');
+    res.sendFile(__dirname + '/public/menu.html');
 });
 
 app.listen(port, () => {
-    console.log(`Front-end server running at http://localhost:${port}`);
+    console.log('Front-end server running at http://localhost:' + port);
 });

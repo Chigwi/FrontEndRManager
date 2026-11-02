@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+//hello
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menú · Maison Ledger</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* Extensiones del tema (pegar en theme.css si se quiere centralizar) */
+.menu-wrap { max-width: 1080px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+.menu-filters { padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+.menu-filters__row { display: grid; grid-template-columns: 2fr 1fr auto; gap: 1rem; align-items: end; }
+.menu-filters .field { margin: 0; }
+.menu-filters .tabs { margin: 1rem 0 0; overflow-x: auto; white-space: nowrap; }
+.menu-filters .tab { flex: none; }
+.menu-count { margin: 0 0 .75rem; }
+.menu-grid { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.menu-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  width: 100%; padding: 1rem 1.25rem; text-align: left; font: inherit; cursor: pointer;
+  background: var(--white); color: var(--gray-900);
+  border: 1px solid var(--gray-200); border-left: 3px solid var(--gold); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.menu-item:hover { background: var(--gold-tint); box-shadow: var(--shadow-md); }
+.menu-item__name { font-weight: 600; color: var(--black); }
+.menu-item__price { font-weight: 700; color: var(--gold-dark); white-space: nowrap; }
+.detail__price { font-size: 2rem; font-weight: 700; color: var(--black); margin: 0 0 .75rem; }
+.detail__badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.empty { padding: 2.5rem 1rem; text-align: center; }
+.skeleton { background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; border-radius: 4px; }
+.skeleton--tab { flex: none; width: 110px; height: 18px; margin: .8rem .9rem; }
+.skeleton--text { display: inline-block; width: 90px; height: 14px; }
+.menu-item--skeleton { cursor: default; border-left-color: var(--gray-300); box-shadow: var(--shadow-sm); }
+.menu-item--skeleton:hover { background: var(--white); box-shadow: var(--shadow-sm); }
+.menu-item--skeleton .skeleton { height: 16px; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (max-width: 700px) { .menu-filters__row { grid-template-columns: 1fr; } .menu-wrap { padding: 1.25rem 1rem 2rem; } }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <ul class="navbar__links"><li><a class="is-active" href="#">Menú</a></li></ul>
+</nav>
+
+<main class="menu-wrap">
+  <div class="page-header">
+    <div><h1>Menú</h1><div class="text-muted">Toca un producto para ver el detalle</div></div>
+  </div>
+
+  <div id="alerta"></div>
+
+  <section class="card menu-filters" aria-label="Filtros del menú">
+    <div class="menu-filters__row">
+      <div class="field">
+        <label class="label" for="buscar">Buscar</label>
+        <input class="input" id="buscar" type="search" placeholder="Nombre del producto">
+      </div>
+      <div class="field">
+        <label class="label" for="orden">Ordenar por</label>
+        <select class="select" id="orden">
+          <option value="nombre">Nombre (A–Z)</option>
+          <option value="precio-asc">Precio: menor a mayor</option>
+          <option value="precio-desc">Precio: mayor a menor</option>
+        </select>
+      </div>
+      <button class="btn btn--outline" id="btnDia" type="button" aria-pressed="false">Menú del día</button>
+    </div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Categorías"></div>
+  </section>
+
+  <p class="text-muted menu-count" id="conteo" aria-live="polite"></p>
+  <div class="menu-grid" id="lista"></div>
+</main>
+
+<div class="modal-backdrop" id="detalle">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dNombre">
+    <div class="modal__header">
+      <h2 class="modal__title" id="dNombre"></h2>
+      <button class="modal__close" id="dCerrar" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <p class="detail__price" id="dPrecio"></p>
+      <div class="detail__badges" id="dBadges"></div>
+      <div id="dDesc" class="mb-2"></div>
+      <div class="text-muted" id="dCat"></div>
+    </div>
+    <div class="modal__footer"><button class="btn btn--dark" id="dOk">Cerrar</button></div>
+  </div>
+</div>
+
+<script>
+// URLs del backend (completar con las reales).
+const API_URL = 'http://localhost:8080/api/menu';                    // todos los productos; el detalle es API_URL + '/' + id
+const API_MENU_DIA = 'http://localhost:8080/api/menu/menu_del_dia';  // solo el menú del día
+
+const $ = id => document.getElementById(id);
+const moneda = n => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(n);
+const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+let productos = [];
+let menuDia = null;      // null = aún no cargado
+let modoDia = false;
+let categoriaActiva = 'todas';
+
+async function alternarMenuDia() {
+  if (!modoDia && menuDia === null) {
+    $('btnDia').disabled = true;
+    mostrarEsqueleto();
+    try {
+      if (!API_MENU_DIA) throw new Error('API_MENU_DIA sin configurar');
+      const r = await fetch(API_MENU_DIA);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      menuDia = await r.json();
+      $('alerta').innerHTML = '';
+    } catch (e) {
+      $('alerta').innerHTML = '<div class="alert alert--danger" role="alert">No se pudo cargar el menú del día. Intenta de nuevo.</div>';
+      $('btnDia').disabled = false;
+      pintarTabs(); pintarLista();
+      return;
+    }
+    $('btnDia').disabled = false;
+  }
+  modoDia = !modoDia;
+  $('btnDia').classList.toggle('btn--primary', modoDia);
+  $('btnDia').classList.toggle('btn--outline', !modoDia);
+  $('btnDia').setAttribute('aria-pressed', modoDia);
+  categoriaActiva = 'todas';
+  pintarTabs();
+  pintarLista();
+}
+
+const fuente = () => (modoDia && menuDia) ? menuDia : productos;
+
+function mostrarEsqueleto(n = 8) {
+  const anchos = [62, 48, 70, 55, 66, 44, 58, 52];
+  $('tabs').innerHTML = '<span class="skeleton skeleton--tab"></span>'.repeat(4);
+  $('conteo').innerHTML = '<span class="skeleton skeleton--text"></span>';
+  $('lista').setAttribute('aria-busy', 'true');
+  $('lista').innerHTML = Array.from({length: n}, (_, i) =>
+    '<div class="menu-item menu-item--skeleton" aria-hidden="true">' +
+    '<span class="skeleton" style="width:' + anchos[i % anchos.length] + '%"></span>' +
+    '<span class="skeleton" style="width:48px"></span></div>').join('');
+}
+let ultimoFoco = null;
+
+async function cargar() {
+  mostrarEsqueleto();
+  if (!API_URL) { $('lista').innerHTML = ''; $('lista').removeAttribute('aria-busy'); $('tabs').innerHTML = ''; $('conteo').textContent = ''; $('alerta').innerHTML = '<div class="alert alert--danger" role="alert">Falta configurar la URL del backend (API_URL).</div>'; return; }
+  try {
+    const r = await fetch(API_URL);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    productos = await r.json();
+    iniciar();
+  } catch (e) {
+    $('lista').innerHTML = ''; $('lista').removeAttribute('aria-busy'); $('tabs').innerHTML = ''; $('conteo').textContent = '';
+    $('alerta').innerHTML = '<div class="alert alert--danger" role="alert">No se pudo cargar el menú. Revisa la conexión e intenta de nuevo.</div>';
+  }
+}
+
+function iniciar() {
+  $('alerta').innerHTML = '';
+  pintarTabs();
+  pintarLista();
+}
+
+function pintarTabs() {
+  const base = fuente();
+  const cats = [...new Map(base.map(p => [p.categoria.id_categoria, p.categoria.nombre])).entries()].sort((a, b) => a[0] - b[0]);
+  const items = [['todas', 'Todas', base.length], ...cats.map(([id, n]) => [String(id), n, base.filter(p => p.categoria.id_categoria === id).length])];
+  $('tabs').innerHTML = '';
+  items.forEach(([id, nombre, total]) => {
+    const b = document.createElement('button');
+    b.className = 'tab' + (id === categoriaActiva ? ' is-active' : '');
+    b.type = 'button'; b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', id === categoriaActiva);
+    b.textContent = nombre + ' (' + total + ')';
+    b.addEventListener('click', () => { categoriaActiva = id; pintarTabs(); pintarLista(); });
+    $('tabs').appendChild(b);
+  });
+}
+
+function filtrados() {
+  const q = norm($('buscar').value.trim());
+  const orden = $('orden').value;
+  const lista = fuente().filter(p =>
+    (categoriaActiva === 'todas' || String(p.categoria.id_categoria) === categoriaActiva) &&
+    (!q || norm(p.nombre).includes(q)));
+  lista.sort((a, b) =>
+    orden === 'precio-asc' ? a.precio - b.precio :
+    orden === 'precio-desc' ? b.precio - a.precio :
+    a.nombre.localeCompare(b.nombre, 'es'));
+  return lista;
+}
+
+function pintarLista() {
+  const lista = filtrados();
+  const cont = $('lista');
+  cont.removeAttribute('aria-busy');
+  cont.innerHTML = '';
+  $('conteo').textContent = lista.length + (lista.length === 1 ? ' producto' : ' productos');
+  if (!lista.length) {
+    cont.innerHTML = '<div class="card empty" style="grid-column:1/-1"><h3>No hay productos con esos filtros</h3><p class="text-muted">Cambia la búsqueda o la categoría.</p><button class="btn btn--outline" id="limpiar">Quitar filtros</button></div>';
+    $('limpiar').addEventListener('click', limpiar);
+    return;
+  }
+  lista.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'menu-item';
+    const n = document.createElement('span'); n.className = 'menu-item__name'; n.textContent = p.nombre;
+    const pr = document.createElement('span'); pr.className = 'menu-item__price'; pr.textContent = moneda(p.precio);
+    b.append(n, pr);
+    b.addEventListener('click', () => abrir(p, b));
+    cont.appendChild(b);
+  });
+}
+
+function limpiar() {
+  $('buscar').value = ''; $('orden').value = 'nombre';
+  categoriaActiva = 'todas'; pintarTabs(); pintarLista();
+}
+
+function badge(texto, clase) {
+  const s = document.createElement('span'); s.className = 'badge ' + clase; s.textContent = texto; return s;
+}
+
+let tokenDetalle = 0;
+
+function pintarDetalle(d) {
+  $('dNombre').textContent = d.nombre;
+  $('dPrecio').textContent = moneda(d.precio);
+  $('dDesc').textContent = d.descripcion;
+  $('dCat').textContent = 'Categoría: ' + d.categoria.nombre;
+  const bd = $('dBadges'); bd.innerHTML = '';
+  bd.appendChild(d.disponible ? badge('Disponible', 'badge--success') : badge('Agotado', 'badge--danger'));
+  if (d.es_menu_del_dia) bd.appendChild(badge('Menú del día', 'badge--gold'));
+}
+
+async function abrir(p, origen) {
+  ultimoFoco = origen;
+  const token = ++tokenDetalle;
+  // Se muestra de inmediato lo que ya se conoce y un esqueleto mientras llega el detalle
+  $('dNombre').textContent = p.nombre;
+  $('dPrecio').textContent = moneda(p.precio);
+  $('dBadges').innerHTML = '<span class="skeleton skeleton--text"></span>';
+  $('dDesc').innerHTML = '<span class="skeleton" style="display:block;height:14px;margin-bottom:.5rem"></span><span class="skeleton" style="display:block;height:14px;width:70%"></span>';
+  $('dCat').textContent = '';
+  $('detalle').classList.add('is-open');
+  $('dCerrar').focus();
+  try {
+    const r = await fetch(API_URL + '/' + encodeURIComponent(p.id_producto));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (token === tokenDetalle) pintarDetalle(d);
+  } catch (e) {
+    if (token !== tokenDetalle) return;
+    $('dBadges').innerHTML = '';
+    $('dDesc').innerHTML = '<div class="alert alert--danger" role="alert">No se pudo cargar el detalle del producto. Cierra e intenta de nuevo.</div>';
+  }
+}
+
+function cerrar() {
+  tokenDetalle++;
+  $('detalle').classList.remove('is-open');
+  if (ultimoFoco) ultimoFoco.focus();
+}
+
+$('buscar').addEventListener('input', pintarLista);
+$('orden').addEventListener('change', pintarLista);
+$('btnDia').addEventListener('click', alternarMenuDia);
+$('dCerrar').addEventListener('click', cerrar);
+$('dOk').addEventListener('click', cerrar);
+$('detalle').addEventListener('click', e => { if (e.target === $('detalle')) cerrar(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('detalle').classList.contains('is-open')) cerrar(); });
+
+cargar();
+</script>
+</body>
+</html>
