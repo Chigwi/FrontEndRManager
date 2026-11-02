@@ -94,6 +94,7 @@
 // URLs del backend (completar con las reales).
 const API_URL = 'http://localhost:8080/api/menu';                    // todos los productos; el detalle es API_URL + '/' + id
 const API_MENU_DIA = 'http://localhost:8080/api/menu/menu_del_dia';  // solo el menú del día
+const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
 
 const $ = id => document.getElementById(id);
 const moneda = n => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(n);
@@ -110,7 +111,7 @@ async function alternarMenuDia() {
     mostrarEsqueleto();
     try {
       if (!API_MENU_DIA) throw new Error('API_MENU_DIA sin configurar');
-      const r = await fetch(API_MENU_DIA);
+      const r = await fetch(API_MENU_DIA, AUTH);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       menuDia = await r.json();
       $('alerta').innerHTML = '';
@@ -149,7 +150,7 @@ async function cargar() {
   mostrarEsqueleto();
   if (!API_URL) { $('lista').innerHTML = ''; $('lista').removeAttribute('aria-busy'); $('tabs').innerHTML = ''; $('conteo').textContent = ''; $('alerta').innerHTML = '<div class="alert alert--danger" role="alert">Falta configurar la URL del backend (API_URL).</div>'; return; }
   try {
-    const r = await fetch(API_URL);
+    const r = await fetch(API_URL, AUTH);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     productos = await r.json();
     iniciar();
@@ -249,7 +250,7 @@ async function abrir(p, origen) {
   $('detalle').classList.add('is-open');
   $('dCerrar').focus();
   try {
-    const r = await fetch(API_URL + '/' + encodeURIComponent(p.id_producto));
+    const r = await fetch(API_URL + '/' + encodeURIComponent(p.id_producto), AUTH);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     if (token === tokenDetalle) pintarDetalle(d);
