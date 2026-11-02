@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de administración</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Admin page only */
+  .view { display: none; }
+  .view.is-active { display: block; }
+
+  .option-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .option {
+    display: flex; flex-direction: column; gap: .75rem;
+    padding: 1.75rem; text-decoration: none; color: inherit;
+    background: var(--white); border: 1px solid var(--gray-200);
+    border-top: 4px solid var(--gold); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .15s, transform .15s;
+  }
+  .option:hover { text-decoration: none; box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .option__icon {
+    width: 48px; height: 48px; display: grid; place-items: center;
+    background: var(--black); color: var(--gold); border-radius: var(--radius);
+  }
+  .option__icon svg { width: 24px; height: 24px; }
+  .option h2 { margin: 0; }
+  .option p { margin: 0; color: var(--gray-500); }
+
+  .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .toolbar .input { max-width: 320px; }
+  .toolbar .btn { margin-left: auto; }
+
+  .empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
+  .empty strong { display: block; margin-bottom: .25rem; color: var(--gray-900); }
+
+  .breadcrumb { margin-bottom: .75rem; font-size: .9rem; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="#panel"><span>&#9670;</span> Maison Ledger</a>
+  <div class="navbar__actions">
+    <span class="badge badge--dark">Administrador</span>
+    <span class="avatar" title="Admin">AD</span>
+    <button class="btn btn--outline btn--sm" style="color:var(--white);border-color:var(--gray-700)">Cerrar sesión</button>
+  </div>
+</nav>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__title">Administración</div>
+      <a href="#panel" data-nav="panel" class="is-active">Panel</a>
+      <a href="#empleados" data-nav="empleados">Empleados</a>
+      <a href="#ordenes" data-nav="ordenes">Órdenes</a>
+      <a href="#menu" data-nav="menu">Menú</a>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <section class="view is-active" id="view-panel">
+      <div class="page-header">
+        <div>
+          <h1>Panel de administración</h1>
+          <div class="text-muted">Selecciona una sección para gestionar.</div>
+        </div>
+      </div>
+
+      <div class="option-grid">
+        <a class="option" href="#empleados">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/><path d="M17 4a4 4 0 0 1 0 8M22 21v-1a6 6 0 0 0-4-5.6"/></svg>
+          </div>
+          <h2>Empleados</h2>
+          <p>Consulta y administra al personal del restaurante.</p>
+        </a>
+        <a class="option" href="#ordenes">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M8 12h8M8 16h5"/></svg>
+          </div>
+          <h2>Órdenes</h2>
+          <p>Revisa y da seguimiento a las órdenes del servicio.</p>
+        </a>
+        <a class="option" href="#menu">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2v9M10 3v7a2 2 0 0 1-2 2M18 21V3c-2.5 1-4 4-4 8 0 2 1 3 4 3"/></svg>
+          </div>
+          <h2>Menú</h2>
+          <p>Gestiona los platos, categorías y precios.</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- Section template: Empleados -->
+    <section class="view" id="view-empleados">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Empleados</div>
+      <div class="page-header"><h1>Empleados</h1></div>
+      <div class="toolbar">
+        <input class="input" type="search" placeholder="Buscar empleado" aria-label="Buscar empleado">
+        <button class="btn btn--primary">Agregar empleado</button>
+      </div>
+      <div class="card"><div class="empty"><strong>Lista de empleados</strong>El contenido se agregará aquí.</div></div>
+    </section>
+
+    <!-- Section template: Órdenes -->
+    <section class="view" id="view-ordenes">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Órdenes</div>
+      <div class="page-header"><h1>Órdenes</h1></div>
+      <div class="toolbar">
+        <input class="input" type="search" placeholder="Buscar orden" aria-label="Buscar orden">
+      </div>
+      <div class="card"><div class="empty"><strong>Lista de órdenes</strong>El contenido se agregará aquí.</div></div>
+    </section>
+
+    <!-- Section template: Menú -->
+    <section class="view" id="view-menu">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Menú</div>
+      <div class="page-header"><h1>Menú</h1></div>
+      <div class="toolbar">
+        <input class="input" type="search" placeholder="Buscar plato" aria-label="Buscar plato">
+        <button class="btn btn--primary">Agregar plato</button>
+      </div>
+      <div class="card"><div class="empty"><strong>Lista del menú</strong>El contenido se agregará aquí.</div></div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Simple hash router: #panel | #empleados | #ordenes | #menu
+  function show() {
+    const id = (location.hash || '#panel').slice(1);
+    const target = document.getElementById('view-' + id) ? id : 'panel';
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + target));
+    document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('is-active', a.dataset.nav === target));
+  }
+  window.addEventListener('hashchange', show);
+  show();
+</script>
+</body>
+</html>
