@@ -1,7 +1,6 @@
 /* =========================================================
    auth.js — sesión compartida para todas las pantallas
-   Incluir en cada página:  <script src="auth.js"></script>..
-   
+   Incluir en cada página:  <script src="auth.js"></script>
    ========================================================= */
 (function () {
   var KEY = 'ml_session';
@@ -12,7 +11,7 @@
     admin:    'menu.html',
     gerente:  'menu.html',
     mesero:   'menu.html',
-    cocina:   'menu.html',
+    cocinero: 'menu.html',
     cajero:   'menu.html'
   };
   var DEFAULT_HOME = 'menu.html'; // para cualquier rol que no esté en la lista
@@ -34,9 +33,15 @@
   var Auth = {
     // Guarda la sesión después de un login correcto
     save: function (data) {
+      var u = Object.assign({}, data.user || {});
+      delete u.contrasenna;             // nunca se guarda la contraseña
+      if (u.rol && typeof u.rol === 'object') {   // { id_rol, nombre } -> texto
+        u.rolId = u.rol.id_rol;
+        u.rol = u.rol.nombre;
+      }
       var session = {
         token: data.token || null,
-        user: data.user || {},          // { cedula, nombre, rol, ... }
+        user: u,                        // { cedula, nombre, apellido, correo, rol, rolId }
         createdAt: Date.now(),
         expiresAt: Date.now() + DURATION_MS
       };
