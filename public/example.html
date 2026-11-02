@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theme preview</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <ul class="navbar__links">
+    <li><a class="is-active" href="#">Dashboard</a></li>
+    <li><a href="#">Orders</a></li>
+    <li><a href="#">Menu</a></li>
+    <li><a href="#">Staff</a></li>
+    <li><a href="#">Inventory</a></li>
+  </ul>
+  <div class="navbar__actions">
+    <button class="btn btn--primary btn--sm" onclick="openModal('m1')">New reservation</button>
+    <span class="avatar">JR</span>
+  </div>
+</nav>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__title">Service</div>
+      <a class="is-active" href="#">Live orders</a>
+      <a href="#">Reservations</a>
+      <a href="#">Tables</a>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__title">Back office</div>
+      <a href="#">Suppliers</a>
+      <a href="#">Reports</a>
+      <a href="#">Settings</a>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="page-header">
+      <div><h1>Dashboard</h1><div class="text-muted">Friday service</div></div>
+      <div class="flex gap-1">
+        <button class="btn btn--outline">Export</button>
+        <button class="btn btn--dark" onclick="openModal('m2')">Close shift</button>
+      </div>
+    </div>
+    <div class="grid grid--stats">
+      <div class="card stat stat--dark"><div class="stat__label">Revenue today</div><div class="stat__value">$8,420</div><div class="stat__delta stat__delta--up">+12% vs last Friday</div></div>
+      <div class="card stat"><div class="stat__label">Open orders</div><div class="stat__value">23</div><div class="stat__delta">6 awaiting kitchen</div></div>
+      <div class="card stat"><div class="stat__label">Covers</div><div class="stat__value">146</div><div class="stat__delta stat__delta--up">+9 today</div></div>
+      <div class="card stat"><div class="stat__label">Low stock items</div><div class="stat__value">4</div><div class="stat__delta stat__delta--down">Reorder needed</div></div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Recent orders</h3><div class="dropdown" id="dd"><button class="btn btn--ghost btn--sm" onclick="document.getElementById('dd').classList.toggle('is-open')">Filter</button><div class="dropdown__menu"><button class="dropdown__item">All orders</button><button class="dropdown__item">Dine-in</button><button class="dropdown__item">Takeaway</button></div></div></div>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Order</th><th>Table</th><th>Server</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>#1042</td><td>12</td><td>Ana</td><td>$86.50</td><td><span class="badge badge--success">Served</span></td></tr>
+          <tr><td>#1043</td><td>4</td><td>Marcus</td><td>$142.00</td><td><span class="badge badge--warning">In kitchen</span></td></tr>
+          <tr><td>#1044</td><td>Bar 2</td><td>Lena</td><td>$38.75</td><td><span class="badge badge--gold">Preparing</span></td></tr>
+          <tr><td>#1045</td><td>9</td><td>Ana</td><td>$64.20</td><td><span class="badge badge--danger">Cancelled</span></td></tr>
+        </tbody></table></div>
+      <div class="card__footer flex between items-center"><span class="text-muted">Showing 4 of 23</span>
+        <ul class="pagination"><li><a href="#">&lsaquo;</a></li><li class="is-active"><a href="#">1</a></li><li><a href="#">2</a></li><li><a href="#">&rsaquo;</a></li></ul></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="m1">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t1">
+    <div class="modal__header"><h2 class="modal__title" id="t1">New reservation</h2><button class="modal__close" onclick="closeModal('m1')" aria-label="Close">&times;</button></div>
+    <div class="modal__body">
+      <div class="field"><label class="label" for="n">Guest name</label><input class="input" id="n" placeholder="Full name"></div>
+      <div class="form-row">
+        <div class="field"><label class="label" for="d">Date</label><input class="input" id="d" type="date"></div>
+        <div class="field"><label class="label" for="p">Party size</label><select class="select" id="p"><option>2</option><option>4</option><option>6</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox"> Send confirmation by email</label>
+    </div>
+    <div class="modal__footer"><button class="btn btn--ghost" onclick="closeModal('m1')">Cancel</button><button class="btn btn--primary" onclick="closeModal('m1')">Save reservation</button></div>
+  </div>
+</div>
+<div class="modal-backdrop" id="m2">
+  <div class="modal modal--sm" role="dialog" aria-modal="true">
+    <div class="modal__header"><h2 class="modal__title">Close shift?</h2><button class="modal__close" onclick="closeModal('m2')" aria-label="Close">&times;</button></div>
+    <div class="modal__body">Open orders will be locked. This can't be undone.</div>
+    <div class="modal__footer"><button class="btn btn--outline" onclick="closeModal('m2')">Keep open</button><button class="btn btn--danger" onclick="closeModal('m2')">Close shift</button></div>
+  </div>
+</div>
+<script>
+function openModal(id){document.getElementById(id).classList.add('is-open')}
+function closeModal(id){document.getElementById(id).classList.remove('is-open')}
+document.querySelectorAll('.modal-backdrop').forEach(b=>{
+  b.addEventListener('click',e=>{if(e.target===b)b.classList.remove('is-open')});
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop.is-open').forEach(m=>m.classList.remove('is-open'))});
+</script>
+</body>
+</html>
