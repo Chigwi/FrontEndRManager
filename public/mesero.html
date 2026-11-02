@@ -103,7 +103,7 @@ const CONFIG = {
   },
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
 };
-
+const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
 /* ================= DATOS DEMO ================= */
 const DEMO = {
   mesas: [{ nombreEmpleado: 'Jane', mesaId: 2, estado: 'Pendiente' }],
@@ -136,7 +136,7 @@ async function api(ruta, metodo = 'GET', cuerpo) {
     method: metodo,
     headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
     body: cuerpo ? JSON.stringify(cuerpo) : undefined
-  });
+  }, AUTH);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const txt = await r.text();
   return txt ? JSON.parse(txt) : null;
