@@ -36,6 +36,11 @@
   .empty strong { display: block; margin-bottom: .25rem; color: var(--gray-900); }
 
   .breadcrumb { margin-bottom: .75rem; font-size: .9rem; }
+
+  .table tbody tr.is-clickable { cursor: pointer; }
+  .detail-list { display: grid; grid-template-columns: 140px 1fr; gap: .75rem 1rem; margin: 0; }
+  .detail-list dt { color: var(--gray-500); font-weight: 500; }
+  .detail-list dd { margin: 0; font-weight: 500; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -101,10 +106,18 @@
       <div class="breadcrumb"><a href="#panel">Panel</a> / Empleados</div>
       <div class="page-header"><h1>Empleados</h1></div>
       <div class="toolbar">
-        <input class="input" type="search" placeholder="Buscar empleado" aria-label="Buscar empleado">
+        <input class="input" id="emp-search" type="search" placeholder="Buscar empleado" aria-label="Buscar empleado">
         <button class="btn btn--primary">Agregar empleado</button>
       </div>
-      <div class="card"><div class="empty"><strong>Lista de empleados</strong>El contenido se agregará aquí.</div></div>
+      <div class="card">
+        <div class="empty" id="emp-state">Cargando empleados…</div>
+        <div class="table-wrap" id="emp-table" hidden>
+          <table class="table">
+            <thead><tr><th>Nombre</th><th>Rol</th></tr></thead>
+            <tbody id="emp-body"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- Section template: Órdenes -->
@@ -131,13 +144,133 @@
   </main>
 </div>
 
+<!-- Modal: detalle de empleado -->
+<div class="modal-backdrop" id="modal-empleado">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="emp-modal-title">
+    <div class="modal__header">
+      <h2 class="modal__title" id="emp-modal-title">Detalle del empleado</h2>
+      <button class="modal__close" id="emp-modal-close" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <dl class="detail-list">
+        <dt>ID</dt><dd id="d-id"></dd>
+        <dt>Nombre</dt><dd id="d-nombre"></dd>
+        <dt>Apellido</dt><dd id="d-apellido"></dd>
+        <dt>Cédula</dt><dd id="d-cedula"></dd>
+        <dt>Correo</dt><dd id="d-correo"></dd>
+        <dt>Rol</dt><dd id="d-rol"></dd>
+      </dl>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" id="emp-modal-ok">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  // Simple hash router: #panel | #empleados | #ordenes | #menu
+  // ---------- Configuración (solo para pruebas: quitar credenciales hardcodeadas) ----------
+  const API = 'http://localhost:8080/api';
+  const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+
+  // ---------- Empleados ----------
+  let empleados = [];
+
+  const $state = document.getElementById('emp-state');
+  const $table = document.getElementById('emp-table');
+  const $body = document.getElementById('emp-body');
+  const $search = document.getElementById('emp-search');
+  const $modal = document.getElementById('modal-empleado');
+
+  function setState(msg, isError) {
+    $state.textContent = msg;
+    $state.style.color = isError ? 'var(--danger)' : '';
+    $state.hidden = false;
+    $table.hidden = true;
+    if (isError) {
+      const retry = document.createElement('button');
+      retry.className = 'btn btn--outline btn--sm';
+      retry.style.marginTop = '1rem';
+      retry.textContent = 'Reintentar';
+      retry.addEventListener('click', cargarEmpleados);
+      $state.appendChild(document.createElement('br'));
+      $state.appendChild(retry);
+    }
+  }
+
+  async function cargarEmpleados() {
+    setState('Cargando empleados…');
+    try {
+      const res = await fetch(API + '/empleado', AUTH);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      empleados = await res.json();
+      renderEmpleados();
+    } catch (err) {
+      console.error(err);
+      setState('No se pudo cargar la lista de empleados.', true);
+    }
+  }
+
+  function renderEmpleados() {
+    const q = $search.value.trim().toLowerCase();
+    const lista = empleados.filter(e =>
+      (e.nombre + ' ' + e.apellido + ' ' + (e.rol ? e.rol.nombre : '')).toLowerCase().includes(q)
+    );
+
+    if (lista.length === 0) {
+      setState(empleados.length === 0 ? 'No hay empleados registrados.' : 'Sin resultados para la búsqueda.');
+      return;
+    }
+
+    $body.replaceChildren();
+    lista.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.className = 'is-clickable';
+      tr.tabIndex = 0;
+
+      const tdNombre = document.createElement('td');
+      tdNombre.textContent = e.nombre + ' ' + e.apellido;
+
+      const tdRol = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--gold';
+      badge.textContent = e.rol ? e.rol.nombre : '—';
+      tdRol.appendChild(badge);
+
+      tr.append(tdNombre, tdRol);
+      tr.addEventListener('click', () => abrirDetalle(e));
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') abrirDetalle(e); });
+      $body.appendChild(tr);
+    });
+
+    $state.hidden = true;
+    $table.hidden = false;
+  }
+
+  // Detalle (nunca se muestra la contraseña)
+  function abrirDetalle(e) {
+    document.getElementById('d-id').textContent = e.id_empleado;
+    document.getElementById('d-nombre').textContent = e.nombre;
+    document.getElementById('d-apellido').textContent = e.apellido;
+    document.getElementById('d-cedula').textContent = e.cedula;
+    document.getElementById('d-correo').textContent = e.correo;
+    document.getElementById('d-rol').textContent = e.rol ? e.rol.nombre : '—';
+    $modal.classList.add('is-open');
+  }
+  function cerrarDetalle() { $modal.classList.remove('is-open'); }
+
+  document.getElementById('emp-modal-close').addEventListener('click', cerrarDetalle);
+  document.getElementById('emp-modal-ok').addEventListener('click', cerrarDetalle);
+  $modal.addEventListener('click', e => { if (e.target === $modal) cerrarDetalle(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarDetalle(); });
+  $search.addEventListener('input', () => { if (empleados.length) renderEmpleados(); });
+
+  // ---------- Router por hash: #panel | #empleados | #ordenes | #menu ----------
   function show() {
     const id = (location.hash || '#panel').slice(1);
     const target = document.getElementById('view-' + id) ? id : 'panel';
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + target));
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('is-active', a.dataset.nav === target));
+    if (target === 'empleados') cargarEmpleados();
   }
   window.addEventListener('hashchange', show);
   show();
