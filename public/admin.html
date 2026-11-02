@@ -107,7 +107,7 @@
       <div class="page-header"><h1>Empleados</h1></div>
       <div class="toolbar">
         <input class="input" id="emp-search" type="search" placeholder="Buscar empleado" aria-label="Buscar empleado">
-        <button class="btn btn--primary">Agregar empleado</button>
+        <button class="btn btn--primary" id="emp-add">Agregar empleado</button>
       </div>
       <div class="card">
         <div class="empty" id="emp-state">Cargando empleados…</div>
@@ -162,10 +162,57 @@
       </dl>
     </div>
     <div class="modal__footer">
+      <button class="btn btn--danger" id="emp-delete" style="margin-right:auto">Eliminar empleado</button>
       <button class="btn btn--outline" id="emp-modal-ok">Cerrar</button>
     </div>
   </div>
 </div>
+
+<!-- Modal: crear empleado -->
+<div class="modal-backdrop" id="modal-crear">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="crear-title">
+    <form id="form-crear" novalidate>
+      <div class="modal__header">
+        <h2 class="modal__title" id="crear-title">Nuevo empleado</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="crear-error" hidden></div>
+        <div class="form-row">
+          <div class="field"><label class="label" for="f-nombre">Nombre</label><input class="input" id="f-nombre" required></div>
+          <div class="field"><label class="label" for="f-apellido">Apellido</label><input class="input" id="f-apellido" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="label" for="f-cedula">Cédula</label><input class="input" id="f-cedula" inputmode="numeric" required></div>
+          <div class="field"><label class="label" for="f-rol">Rol</label><select class="select" id="f-rol" required></select></div>
+        </div>
+        <div class="field"><label class="label" for="f-correo">Correo</label><input class="input" id="f-correo" type="email" required></div>
+        <div class="field"><label class="label" for="f-contrasenna">Contraseña</label><input class="input" id="f-contrasenna" type="password" autocomplete="new-password" required></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="crear-submit">Crear empleado</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: confirmar eliminación -->
+<div class="modal-backdrop" id="modal-confirm">
+  <div class="modal modal--sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal__header"><h2 class="modal__title" id="confirm-title">¿Eliminar empleado?</h2></div>
+    <div class="modal__body">
+      <p id="confirm-text" style="margin:0"></p>
+      <div class="alert alert--danger mt-2" id="confirm-error" hidden></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" data-close>Cancelar</button>
+      <button class="btn btn--danger" id="confirm-yes">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
 
 <script>
   // ---------- Configuración (solo para pruebas: quitar credenciales hardcodeadas) ----------
@@ -247,7 +294,10 @@
   }
 
   // Detalle (nunca se muestra la contraseña)
+  let seleccionado = null;
+
   function abrirDetalle(e) {
+    seleccionado = e;
     document.getElementById('d-id').textContent = e.id_empleado;
     document.getElementById('d-nombre').textContent = e.nombre;
     document.getElementById('d-apellido').textContent = e.apellido;
@@ -260,9 +310,156 @@
 
   document.getElementById('emp-modal-close').addEventListener('click', cerrarDetalle);
   document.getElementById('emp-modal-ok').addEventListener('click', cerrarDetalle);
-  $modal.addEventListener('click', e => { if (e.target === $modal) cerrarDetalle(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarDetalle(); });
   $search.addEventListener('input', () => { if (empleados.length) renderEmpleados(); });
+
+  // ---------- Modales: cerrar con X/Cancelar, clic fuera o Escape ----------
+  const $crear = document.getElementById('modal-crear');
+  const $confirm = document.getElementById('modal-confirm');
+
+  document.querySelectorAll('.modal-backdrop').forEach(b => {
+    b.addEventListener('click', e => { if (e.target === b) b.classList.remove('is-open'); });
+    b.querySelectorAll('[data-close]').forEach(btn =>
+      btn.addEventListener('click', () => b.classList.remove('is-open')));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    // Cierra solo el modal que está encima (el último abierto en el DOM)
+    const abiertos = document.querySelectorAll('.modal-backdrop.is-open');
+    if (abiertos.length) abiertos[abiertos.length - 1].classList.remove('is-open');
+  });
+
+  // ---------- Avisos ----------
+  function toast(msg, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+    t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
+  async function mensajeDeError(res) {
+    let detalle = '';
+    try { detalle = (await res.text()).slice(0, 200); } catch (_) {}
+    return 'Error ' + res.status + (detalle ? ': ' + detalle : '');
+  }
+
+  // ---------- Crear empleado ----------
+  // Completa esta lista con los roles de tu backend (id_rol y nombre).
+  // También se agregan automáticamente los roles que ya aparezcan en la lista de empleados.
+  const ROLES_BASE = [
+    { id_rol: 1, nombre: 'mesero' },
+    { id_rol: 2, nombre: 'cocinero' },
+    { id_rol: 3, nombre: 'admin' }
+  ];
+
+  function rolesDisponibles() {
+    const mapa = new Map(ROLES_BASE.map(r => [r.id_rol, r]));
+    empleados.forEach(e => { if (e.rol) mapa.set(e.rol.id_rol, e.rol); });
+    return [...mapa.values()].sort((a, b) => a.id_rol - b.id_rol);
+  }
+
+  const $form = document.getElementById('form-crear');
+  const $crearError = document.getElementById('crear-error');
+  const $crearSubmit = document.getElementById('crear-submit');
+
+  document.getElementById('emp-add').addEventListener('click', () => {
+    $form.reset();
+    $crearError.hidden = true;
+    const $rol = document.getElementById('f-rol');
+    $rol.replaceChildren();
+    rolesDisponibles().forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.id_rol;
+      o.textContent = r.nombre;
+      $rol.appendChild(o);
+    });
+    $crear.classList.add('is-open');
+    document.getElementById('f-nombre').focus();
+  });
+
+  $form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    $crearError.hidden = true;
+
+    const val = id => document.getElementById(id).value.trim();
+    const $rol = document.getElementById('f-rol');
+    const campos = ['f-nombre', 'f-apellido', 'f-cedula', 'f-correo', 'f-contrasenna'];
+
+    if (campos.some(id => !val(id)) || !$rol.value) {
+      $crearError.textContent = 'Completa todos los campos.';
+      $crearError.hidden = false;
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(val('f-correo'))) {
+      $crearError.textContent = 'El correo no es válido.';
+      $crearError.hidden = false;
+      return;
+    }
+
+    const body = {
+      nombre: val('f-nombre'),
+      apellido: val('f-apellido'),
+      cedula: val('f-cedula'),
+      contrasenna: document.getElementById('f-contrasenna').value,
+      correo: val('f-correo'),
+      rol: {
+        id_rol: Number($rol.value),
+        nombre: $rol.options[$rol.selectedIndex].textContent
+      }
+    };
+
+    $crearSubmit.disabled = true;
+    try {
+      const res = await fetch(API + '/empleado/crearempleado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $crear.classList.remove('is-open');
+      toast('Empleado creado correctamente.', 'success');
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $crearError.textContent = 'No se pudo crear el empleado. ' + err.message;
+      $crearError.hidden = false;
+    } finally {
+      $crearSubmit.disabled = false;
+    }
+  });
+
+  // ---------- Eliminar empleado ----------
+  const $confirmError = document.getElementById('confirm-error');
+  const $confirmYes = document.getElementById('confirm-yes');
+
+  document.getElementById('emp-delete').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $confirmError.hidden = true;
+    document.getElementById('confirm-text').textContent =
+      'Se eliminará a ' + seleccionado.nombre + ' ' + seleccionado.apellido + '. Esta acción no se puede deshacer.';
+    $confirm.classList.add('is-open');
+  });
+
+  $confirmYes.addEventListener('click', async () => {
+    if (!seleccionado) return;
+    $confirmYes.disabled = true;
+    $confirmError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleado/empleados/' + seleccionado.id_empleado, { method: 'DELETE', ...AUTH });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $confirm.classList.remove('is-open');
+      cerrarDetalle();
+      toast('Empleado eliminado.', 'success');
+      seleccionado = null;
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $confirmError.textContent = 'No se pudo eliminar. ' + err.message;
+      $confirmError.hidden = false;
+    } finally {
+      $confirmYes.disabled = false;
+    }
+  });
 
   // ---------- Router por hash: #panel | #empleados | #ordenes | #menu ----------
   function show() {
