@@ -1,0 +1,29 @@
+{
+  "name": "front-end-rmanager",
+  "version": "1.0.0",
+  "description": "front end de la aplicacion Rmanager",
+  "keywords": [
+    "restaurante",
+    "manager"
+  ],
+  "homepage": "https://github.com/Chigwi/FrontEndRManager#readme",
+  "bugs": {
+    "url": "https://github.com/Chigwi/FrontEndRManager/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chigwi/FrontEndRManager.git"
+  },
+  "author": "Allie Salo Sam",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+  
+}
+
