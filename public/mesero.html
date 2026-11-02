@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maison Ledger · Vista de mesero</title>
+<link rel="stylesheet" href="mesero.css">
+<style>
+  .mesa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; }
+  .mesa { padding:1.1rem 1.25rem; }
+  .mesa__num { font-size:1.6rem; font-weight:700; color:var(--black); }
+  .mesa__row { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
+  .detail dt { font-size:.82rem; color:var(--gray-500); font-weight:600; margin-top:.8rem; }
+  .detail dd { margin:0; }
+  .empty { padding:2rem; text-align:center; color:var(--gray-500); }
+  .main--full { max-width:1100px; margin:0 auto; padding:2rem; }
+  @media (max-width:560px){ .main--full{ padding:1.25rem; } }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <div class="navbar__actions">
+    <span id="meseroNombre" class="text-muted"></span>
+    <span class="avatar" id="meseroAvatar">M</span>
+  </div>
+</nav>
+
+<main class="main--full">
+  <div class="page-header">
+    <div><h1>Mis mesas</h1><div class="text-muted" id="subtitulo">Mesas con pedido activo asignadas a ti</div></div>
+    <div class="flex gap-1">
+      <button class="btn btn--outline" onclick="cargarMesas()">Actualizar</button>
+      <button class="btn btn--primary" onclick="abrirNuevo()">Nuevo pedido</button>
+    </div>
+  </div>
+
+  <div id="aviso"></div>
+  <div class="mesa-grid" id="mesas"></div>
+</main>
+
+<!-- Modal: detalle / edición de pedido -->
+<div class="modal-backdrop" id="mPedido">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tPedido">
+    <div class="modal__header"><h2 class="modal__title" id="tPedido">Pedido</h2><button class="modal__close" onclick="cerrar('mPedido')" aria-label="Cerrar">&times;</button></div>
+    <div class="modal__body">
+      <dl class="detail" id="detalle"></dl>
+      <hr>
+      <div class="field">
+        <label class="label" for="metodo">Método de pago</label>
+        <select class="select" id="metodo"></select>
+      </div>
+      <div class="field">
+        <label class="label" for="incidente">Incidente</label>
+        <textarea class="textarea" id="incidente" placeholder="Describe cualquier incidente con el pedido"></textarea>
+        <div class="field__hint">Se guarda en el pedido.</div>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" onclick="cerrar('mPedido')">Cerrar</button>
+      <button class="btn btn--primary" onclick="guardarPedido()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nuevo pedido -->
+<div class="modal-backdrop" id="mNuevo">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="tNuevo">
+    <div class="modal__header"><h2 class="modal__title" id="tNuevo">Nuevo pedido</h2><button class="modal__close" onclick="cerrar('mNuevo')" aria-label="Cerrar">&times;</button></div>
+    <div class="modal__body">
+      <div class="field">
+        <label class="label" for="nuevaMesa">Mesa</label>
+        <input class="input" id="nuevaMesa" type="number" min="1" placeholder="Número de mesa">
+      </div>
+      <div class="field">
+        <label class="label" for="nuevoIncidente">Incidente (opcional)</label>
+        <textarea class="textarea" id="nuevoIncidente"></textarea>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" onclick="cerrar('mNuevo')">Cancelar</button>
+      <button class="btn btn--primary" onclick="crearPedido()">Crear pedido</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+/* ================= CONFIGURACIÓN =================
+   Ajusta las rutas a tu backend. Si la API no responde,
+   la página usa datos de ejemplo (modo demo) tomados de la guía. */
+const CONFIG = {
+  API: 'http://localhost:8080',
+  MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || 5,
+  rutas: {
+    mesasEmpleado: id => `/mesas/empleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
+    pedido:        id => `/pedidos/${id}`,               // GET  -> pedido completo
+    estado:        id => `/pedidos/${id}/estado`,        // GET  -> {pedido_id, estado}
+    crearPedido:   '/pedidos',                           // POST -> pedido insert dto
+    editarPedido:  id => `/pedidos/${id}`,               // PUT  -> pedido insert dto
+    metodoPago:    '/pedidos/metodo-pago'                // PUT  -> {idPedido, idMetodo}
+  },
+  metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
+};
+
+/* ================= DATOS DEMO ================= */
+const DEMO = {
+  mesas: [{ nombreEmpleado: 'Jane', mesaId: 2, estado: 'Pendiente' }],
+  pedido: {
+    id_pedido: 1, mesa: { id: 2, cupo: 2, ocupada: false },
+    mesero: { id_empleado: 5, nombre: 'Jane', apellido: 'Doe', correo: 'JaneDoe@outlook.com', rol: { id_rol: 2, nombre: 'mesero' } },
+    estado: { id_estado: 1, nombre: 'Pendiente' },
+    fecha_creacion: '2026-10-19T22:01:03.077829', fecha_ultima_actualizacion: '2026-10-19T22:13:56.165548',
+    precio_total: null, metodo_de_pago: 'Tarjeta'
+  }
+};
+let demo = false, actual = null;
+
+/* ================= UTILIDADES ================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const abrir = id => $(id).classList.add('is-open');
+const cerrar = id => $(id).classList.remove('is-open');
+document.querySelectorAll('.modal-backdrop').forEach(b => b.addEventListener('click', e => { if (e.target === b) cerrar(b.id); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop.is-open').forEach(m => m.classList.remove('is-open')); });
+
+function toast(msg, tipo) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+  t.textContent = msg; $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+async function api(ruta, metodo = 'GET', cuerpo) {
+  const r = await fetch(CONFIG.API + ruta, {
+    method: metodo,
+    headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
+}
+const claseEstado = e => ({ pendiente:'badge--warning', preparando:'badge--gold', 'en cocina':'badge--warning', servido:'badge--success', cancelado:'badge--danger' }[String(e).toLowerCase()] || '');
+const fecha = f => f ? new Date(f).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+/* ================= MESAS DEL MESERO ================= */
+async function cargarMesas() {
+  let mesas;
+  try { mesas = await api(CONFIG.rutas.mesasEmpleado(CONFIG.MESERO_ID)); demo = false; $('aviso').innerHTML = ''; }
+  catch { mesas = DEMO.mesas; demo = true;
+    $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>'; }
+  if (mesas[0]) { $('meseroNombre').textContent = mesas[0].nombreEmpleado; $('meseroAvatar').textContent = mesas[0].nombreEmpleado[0].toUpperCase(); }
+  $('mesas').innerHTML = mesas.length ? mesas.map(m => `
+    <div class="card mesa stat">
+      <div class="mesa__row"><span class="mesa__num">Mesa ${esc(m.mesaId)}</span>
+        <span class="badge ${claseEstado(m.estado)}">${esc(m.estado)}</span></div>
+      <div class="text-muted mb-2">Mesero: ${esc(m.nombreEmpleado)}</div>
+      <button class="btn btn--outline btn--sm btn--block" onclick="verPedido(${Number(m.pedidoId ?? m.mesaId)})">Ver y editar pedido</button>
+    </div>`).join('') : '<div class="card empty" style="grid-column:1/-1">No tienes mesas asignadas. Crea un pedido para empezar.</div>';
+}
+
+/* ================= DETALLE / EDICIÓN ================= */
+async function verPedido(id) {
+  try { actual = demo ? DEMO.pedido : await api(CONFIG.rutas.pedido(id)); }
+  catch { return toast('No se pudo cargar el pedido ' + id, 'danger'); }
+  $('tPedido').textContent = 'Pedido #' + actual.id_pedido;
+  $('detalle').innerHTML = `
+    <dt>Mesa</dt><dd>${esc(actual.mesa?.id)} (cupo ${esc(actual.mesa?.cupo)})</dd>
+    <dt>Estado</dt><dd><span class="badge ${claseEstado(actual.estado?.nombre)}">${esc(actual.estado?.nombre)}</span></dd>
+    <dt>Mesero</dt><dd>${esc(actual.mesero?.nombre)} ${esc(actual.mesero?.apellido)}</dd>
+    <dt>Creado</dt><dd>${fecha(actual.fecha_creacion)}</dd>
+    <dt>Última actualización</dt><dd>${fecha(actual.fecha_ultima_actualizacion)}</dd>
+    <dt>Total</dt><dd>${actual.precio_total == null ? 'Sin calcular' : '$' + Number(actual.precio_total).toLocaleString('es-CO')}</dd>`;
+  $('metodo').innerHTML = CONFIG.metodos.map(m =>
+    `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
+  $('incidente').value = actual.incidente || '';
+  abrir('mPedido');
+}
+
+async function guardarPedido() {
+  const id = actual.id_pedido;
+  try {
+    if (!demo) {
+      await api(CONFIG.rutas.editarPedido(id), 'PUT', { id, incidente: $('incidente').value.trim() });
+      await api(CONFIG.rutas.metodoPago, 'PUT', { idPedido: id, idMetodo: Number($('metodo').value) });
+    }
+    cerrar('mPedido'); toast('Pedido actualizado', 'success'); cargarMesas();
+  } catch { toast('No se pudieron guardar los cambios', 'danger'); }
+}
+
+/* ================= NUEVO PEDIDO ================= */
+function abrirNuevo() { $('nuevaMesa').value = ''; $('nuevoIncidente').value = ''; abrir('mNuevo'); }
+async function crearPedido() {
+  const mesaId = Number($('nuevaMesa').value);
+  if (!mesaId) return toast('Indica el número de mesa', 'danger');
+  // DTO de la guía: { id, incidente }. mesaId y meseroId son extras: ajústalos a lo que espere tu backend.
+  const dto = { id: null, incidente: $('nuevoIncidente').value.trim(), mesaId, meseroId: CONFIG.MESERO_ID };
+  try {
+    if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', dto);
+    cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarMesas();
+  } catch { toast('No se pudo crear el pedido', 'danger'); }
+}
+
+cargarMesas();
+</script>
+</body>
+</html>
