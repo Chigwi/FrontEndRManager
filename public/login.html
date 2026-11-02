@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión · Maison Ledger</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { background: var(--black); }
+  .login { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
+
+  /* Panel de marca */
+  .login__brand {
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 3rem; color: var(--white);
+    background:
+      radial-gradient(circle at 15% 85%, rgba(201,162,39,.22), transparent 45%),
+      linear-gradient(160deg, #0b0b0b 0%, var(--black) 60%);
+    border-right: 3px solid var(--gold);
+  }
+  .login__brand::after {
+    content: ''; position: absolute; right: -120px; top: -120px;
+    width: 380px; height: 380px; border: 1px solid rgba(201,162,39,.35);
+    transform: rotate(45deg);
+  }
+  .login__logo { font-size: 1.3rem; font-weight: 700; letter-spacing: .02em; }
+  .login__logo span { color: var(--gold); margin-right: .4rem; }
+  .login__headline { font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.1; color: var(--white); max-width: 14ch; margin-bottom: 1rem; letter-spacing: -.02em; }
+  .login__sub { color: var(--gray-300); max-width: 38ch; margin: 0; }
+  .login__foot { color: var(--gray-500); font-size: .85rem; margin: 0; }
+
+  /* Panel del formulario */
+  .login__panel { display: flex; align-items: center; justify-content: center; padding: 2rem; background: var(--gray-50); }
+  .login__card { width: 100%; max-width: 420px; padding: 2.25rem; border-top: 4px solid var(--gold); box-shadow: var(--shadow-md); }
+  .login__card h2 { font-size: 1.6rem; margin-bottom: .25rem; }
+  .login__card .text-muted { margin-bottom: 1.75rem; }
+
+  .pw { position: relative; }
+  .pw .input { padding-right: 4.5rem; }
+  .pw__toggle {
+    position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
+    background: none; border: 0; padding: .35rem .6rem; border-radius: var(--radius);
+    font: inherit; font-size: .85rem; font-weight: 600; color: var(--gold-dark); cursor: pointer;
+  }
+  .pw__toggle:hover { background: var(--gold-tint); }
+
+  .login__row { display: flex; align-items: center; justify-content: space-between; margin: .25rem 0 1.5rem; font-size: .9rem; }
+  .login__help { margin: 1.5rem 0 0; text-align: center; font-size: .88rem; color: var(--gray-500); }
+  .btn.is-loading { pointer-events: none; opacity: .75; }
+
+  @media (max-width: 900px) {
+    .login { grid-template-columns: 1fr; }
+    .login__brand { padding: 1.5rem; border-right: 0; border-bottom: 3px solid var(--gold); }
+    .login__brand::after, .login__headline, .login__sub, .login__foot { display: none; }
+    .login__panel { padding: 1.5rem 1rem 2.5rem; }
+    .login__card { padding: 1.75rem 1.25rem; }
+  }
+</style>
+</head>
+<body>
+<div class="login">
+  <section class="login__brand">
+    <div class="login__logo"><span>&#9670;</span>Maison Ledger</div>
+    <div>
+      <h1 class="login__headline">Tu restaurante, bajo control.</h1>
+      <p class="login__sub">Pedidos, mesas, inventario y personal en un solo lugar.</p>
+    </div>
+    <p class="login__foot">&copy; 2026 Maison Ledger</p>
+  </section>
+
+  <main class="login__panel">
+    <div class="card login__card">
+      <h2>Iniciar sesión</h2>
+      <p class="text-muted">Ingresa con tu cédula y contraseña.</p>
+
+      <div class="alert alert--danger" id="formError" role="alert" hidden></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label class="label" for="cedula">Cédula</label>
+          <input class="input" id="cedula" name="cedula" type="text" inputmode="numeric"
+                 autocomplete="username" maxlength="10" placeholder="Ej: 1020304050" required>
+          <div class="field__error" id="cedulaError" hidden></div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="password">Contraseña</label>
+          <div class="pw">
+            <input class="input" id="password" name="password" type="password"
+                   autocomplete="current-password" placeholder="Tu contraseña" required>
+            <button class="pw__toggle" type="button" id="togglePw" aria-label="Mostrar contraseña">Mostrar</button>
+          </div>
+          <div class="field__error" id="passwordError" hidden></div>
+        </div>
+
+        <div class="login__row">
+          <label class="check"><input type="checkbox" id="remember"> Recordar mi cédula</label>
+          <a href="#">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <button class="btn btn--primary btn--lg btn--block" type="submit" id="submitBtn">Entrar</button>
+      </form>
+
+      <p class="login__help">¿Problemas para ingresar? Habla con tu administrador.</p>
+    </div>
+  </main>
+</div>
+
+<script src="auth.js"></script>
+<script>
+Auth.redirectIfLoggedIn(); // si ya hay sesión, entra directo
+
+const form = document.getElementById('loginForm');
+const cedula = document.getElementById('cedula');
+const password = document.getElementById('password');
+const formError = document.getElementById('formError');
+const submitBtn = document.getElementById('submitBtn');
+const remember = document.getElementById('remember');
+
+// Recordar cédula (solo la cédula, nunca la contraseña)
+try {
+  const saved = localStorage.getItem('cedula');
+  if (saved) { cedula.value = saved; remember.checked = true; }
+} catch (e) {}
+
+// Solo números en la cédula
+cedula.addEventListener('input', () => { cedula.value = cedula.value.replace(/\D/g, ''); });
+
+// Mostrar / ocultar contraseña
+document.getElementById('togglePw').addEventListener('click', e => {
+  const show = password.type === 'password';
+  password.type = show ? 'text' : 'password';
+  e.currentTarget.textContent = show ? 'Ocultar' : 'Mostrar';
+  e.currentTarget.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+});
+
+function setError(input, errId, msg) {
+  const el = document.getElementById(errId);
+  el.textContent = msg || '';
+  el.hidden = !msg;
+  input.classList.toggle('is-invalid', !!msg);
+}
+
+function validate() {
+  let ok = true;
+  const c = cedula.value.trim();
+  if (!c) { setError(cedula, 'cedulaError', 'Escribe tu cédula.'); ok = false; }
+  else if (c.length < 6 || c.length > 10) { setError(cedula, 'cedulaError', 'La cédula debe tener entre 6 y 10 dígitos.'); ok = false; }
+  else setError(cedula, 'cedulaError', '');
+
+  if (!password.value) { setError(password, 'passwordError', 'Escribe tu contraseña.'); ok = false; }
+  else if (password.value.length < 6) { setError(password, 'passwordError', 'La contraseña debe tener al menos 6 caracteres.'); ok = false; }
+  else setError(password, 'passwordError', '');
+  return ok;
+}
+
+/* ---------------------------------------------------------
+   Conecta aquí tu backend. Debe responder con JSON:
+   { token: '...', user: { cedula, nombre, rol } }
+   --------------------------------------------------------- */
+async function authenticate(cedulaValue, passwordValue) {
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cedula: cedulaValue, password: passwordValue })
+  });
+  if (res.ok) {
+    const data = await res.json();
+    return { ok: true, token: data.token, user: data.user || { cedula: cedulaValue } };
+  }
+  return { ok: false, message: 'Cédula o contraseña incorrecta. Revisa los datos e inténtalo de nuevo.' };
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  formError.hidden = true;
+  if (!validate()) return;
+
+  submitBtn.classList.add('is-loading');
+  submitBtn.textContent = 'Verificando…';
+  try {
+    const result = await authenticate(cedula.value.trim(), password.value);
+    if (result.ok) {
+      try {
+        if (remember.checked) localStorage.setItem('cedula', cedula.value.trim());
+        else localStorage.removeItem('cedula');
+      } catch (err) {}
+      Auth.save({ token: result.token, user: result.user }); // guarda la sesión
+      window.location.href = Auth.homeFor(result.user.rol); // según el rol
+    } else {
+      formError.textContent = result.message;
+      formError.hidden = false;
+    }
+  } catch (err) {
+    formError.textContent = 'No pudimos conectar con el servidor. Inténtalo de nuevo en unos minutos.';
+    formError.hidden = false;
+  } finally {
+    submitBtn.classList.remove('is-loading');
+    submitBtn.textContent = 'Entrar';
+  }
+});
+</script>
+</body>
+</html>
