@@ -118,7 +118,7 @@ const formError = document.getElementById('formError');
 const submitBtn = document.getElementById('submitBtn');
 const remember = document.getElementById('remember');
 
-// Recordar cédula (solo la cédula, nunca la contraseña)
+// Recordar cédula (solo la cédula, nunca la contraseña (RECORDAR))
 try {
   const saved = localStorage.getItem('cedula');
   if (saved) { cedula.value = saved; remember.checked = true; }
