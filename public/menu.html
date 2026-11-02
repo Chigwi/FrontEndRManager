@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Menú · Maison Ledger</title>
+<title>Menú · R-manager</title>
 <link rel="stylesheet" href="theme.css">
 <style>
 /* Extensiones del tema (pegar en theme.css si se quiere centralizar) */
@@ -40,7 +40,7 @@
 </head>
 <body>
 <nav class="navbar">
-  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <a class="navbar__brand" href="#"><span>&#9670;</span> R-manager</a>
   <ul class="navbar__links"><li><a class="is-active" href="#">Menú</a></li></ul>
 </nav>
 
@@ -95,10 +95,56 @@
 const API_URL = 'http://localhost:8080/api/menu';                    // todos los productos; el detalle es API_URL + '/' + id
 const API_MENU_DIA = 'http://localhost:8080/api/menu/menu_del_dia';  // solo el menú del día
 const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
-
 const $ = id => document.getElementById(id);
 const moneda = n => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(n);
 const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+
+// ---- Agrupación de categorías para mostrar ----
+const GRUPOS = [
+  ['comidas', 'Comidas'],
+  ['hamburguesas', 'Hamburguesas'],
+  ['pizzas', 'Pizzas'],
+  ['frias', 'Bebidas frías'],
+  ['calientes', 'Bebidas calientes'],
+  ['postres', 'Postres']
+];
+const NOMBRE_GRUPO = Object.fromEntries(GRUPOS);
+
+// Palabras clave del nombre del producto (se revisan primero, en este orden)
+const PALABRAS = [
+  ['hamburguesas', ['hamburguesa', 'burger', 'cheeseburger']],
+  ['pizzas',    ['pizza', 'calzone']],
+  ['postres',   ['pie', 'pastel', 'torta', 'tarta', 'cheesecake', 'brownie', 'flan', 'helado', 'mousse', 'gelatina', 'tiramisu', 'tres leches', 'postre', 'galleta', 'cupcake', 'waffle', 'crepe', 'natilla', 'arroz con leche', 'brigadeiro', 'tarta']],
+  ['calientes', ['cafe', 'espresso', 'capuchino', 'cappuccino', 'latte', 'mocca', 'moca', 'americano', 'macchiato', 'chocolate caliente', 'te caliente', 'infusion', 'aromatica', 'aromarica', 'frutos rojos', 'chai', 'canelazo']],
+  ['frias',     ['jugo', 'limonada', 'gaseosa', 'soda', 'cerveza', 'batido', 'malteada', 'frappe', 'smoothie', 'agua', 'te frio', 'te helado', 'granizado', 'cola', 'coca', 'sprite', 'michelada', 'cocktail', 'coctel', 'mojito', 'vino', 'naranjada', 'refresco', 'cereza', 'fresa', 'mora', 'mango', 'maracuya', 'lulo', 'naranja', 'malta', 'chicha', 'tropical']]
+];
+
+// Reglas por nombre de categoría del backend (se usan si ninguna palabra clave coincide)
+const CATEGORIA_A_GRUPO = [
+  ['hamburguesa', 'hamburguesas'],
+  ['burger', 'hamburguesas'],
+  ['pizza', 'pizzas'],
+  ['sopa', 'postres'],        // en este menú "Sopas" contiene postres
+  ['postre', 'postres'],
+  ['caliente', 'calientes'],
+  ['fria', 'frias'],
+  ['helada', 'frias'],
+  ['bebida', 'frias'],
+  ['comida', 'comidas']
+];
+
+function grupo(p) {
+  const g = grupoInterno(p);
+  return g;
+}
+function grupoInterno(p) {
+  const nombre = norm(p.nombre || '');
+  for (const [g, claves] of PALABRAS) if (claves.some(c => new RegExp('\\b' + c + '(s|es)?\\b').test(nombre))) return g;
+  const cat = norm((p.categoria && p.categoria.nombre) || '');
+  for (const [clave, g] of CATEGORIA_A_GRUPO) if (cat.includes(clave)) return g;
+  return 'comidas';
+}
 
 let productos = [];
 let menuDia = null;      // null = aún no cargado
@@ -153,6 +199,7 @@ async function cargar() {
     const r = await fetch(API_URL, AUTH);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     productos = await r.json();
+    console.table(productos.map(p => ({ producto: p.nombre, categoria_backend: p.categoria && p.categoria.nombre, se_muestra_en: NOMBRE_GRUPO[grupo(p)] })));
     iniciar();
   } catch (e) {
     $('lista').innerHTML = ''; $('lista').removeAttribute('aria-busy'); $('tabs').innerHTML = ''; $('conteo').textContent = '';
@@ -168,8 +215,8 @@ function iniciar() {
 
 function pintarTabs() {
   const base = fuente();
-  const cats = [...new Map(base.map(p => [p.categoria.id_categoria, p.categoria.nombre])).entries()].sort((a, b) => a[0] - b[0]);
-  const items = [['todas', 'Todas', base.length], ...cats.map(([id, n]) => [String(id), n, base.filter(p => p.categoria.id_categoria === id).length])];
+  const items = [['todas', 'Todas', base.length],
+    ...GRUPOS.map(([id, n]) => [id, n, base.filter(p => grupo(p) === id).length]).filter(x => x[2] > 0)];
   $('tabs').innerHTML = '';
   items.forEach(([id, nombre, total]) => {
     const b = document.createElement('button');
@@ -186,7 +233,7 @@ function filtrados() {
   const q = norm($('buscar').value.trim());
   const orden = $('orden').value;
   const lista = fuente().filter(p =>
-    (categoriaActiva === 'todas' || String(p.categoria.id_categoria) === categoriaActiva) &&
+    (categoriaActiva === 'todas' || grupo(p) === categoriaActiva) &&
     (!q || norm(p.nombre).includes(q)));
   lista.sort((a, b) =>
     orden === 'precio-asc' ? a.precio - b.precio :
@@ -232,7 +279,7 @@ function pintarDetalle(d) {
   $('dNombre').textContent = d.nombre;
   $('dPrecio').textContent = moneda(d.precio);
   $('dDesc').textContent = d.descripcion;
-  $('dCat').textContent = 'Categoría: ' + d.categoria.nombre;
+  $('dCat').textContent = 'Categoría: ' + NOMBRE_GRUPO[grupo(d)];
   const bd = $('dBadges'); bd.innerHTML = '';
   bd.appendChild(d.disponible ? badge('Disponible', 'badge--success') : badge('Agotado', 'badge--danger'));
   if (d.es_menu_del_dia) bd.appendChild(badge('Menú del día', 'badge--gold'));
