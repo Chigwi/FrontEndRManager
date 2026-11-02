@@ -94,12 +94,12 @@ const CONFIG = {
   API: 'http://localhost:8080',
   MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || 5,
   rutas: {
-    mesasEmpleado: id => `/mesas/empleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
-    pedido:        id => `/pedidos/${id}`,               // GET  -> pedido completo
-    estado:        id => `/pedidos/${id}/estado`,        // GET  -> {pedido_id, estado}
-    crearPedido:   '/pedidos',                           // POST -> pedido insert dto
-    editarPedido:  id => `/pedidos/${id}`,               // PUT  -> pedido insert dto
-    metodoPago:    '/pedidos/metodo-pago'                // PUT  -> {idPedido, idMetodo}
+    mesasEmpleado: id => `/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
+    pedido:        id => `/pedido/${id}`,               // GET  -> pedido completo
+    estado:        id => `/pedido/estado/${id}`,        // GET  -> {pedido_id, estado}
+    crearPedido:   '/pedido',                           // POST -> pedido insert dto
+    editarPedido:  id => `/pedido/${id}`,               // PUT  -> pedido insert dto
+    metodoPago:    '/pedido/metodoDePago'                // PUT  -> {idPedido, idMetodo}
   },
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
 };
