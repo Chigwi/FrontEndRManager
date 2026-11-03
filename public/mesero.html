@@ -6,14 +6,16 @@
 <title>Maison Ledger · Vista de mesero</title>
 <link rel="stylesheet" href="mesero.css">
 <style>
-  .mesa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; }
-  .mesa { padding:1.1rem 1.25rem; }
-  .mesa__num { font-size:1.6rem; font-weight:700; color:var(--black); }
-  .mesa__row { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
+  .lista { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1.25rem; }
+  .item { padding:1.1rem 1.25rem; }
+  .item__row { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
+  .item__num { font-size:1.4rem; font-weight:700; color:var(--black); }
+  .item__meta { margin-bottom:.9rem; }
   .detail dt { font-size:.82rem; color:var(--gray-500); font-weight:600; margin-top:.8rem; }
   .detail dd { margin:0; }
-  .empty { padding:2rem; text-align:center; color:var(--gray-500); }
+  .empty { padding:2rem; text-align:center; color:var(--gray-500); grid-column:1/-1; }
   .main--full { max-width:1100px; margin:0 auto; padding:2rem; }
+  .tabs { margin-bottom:1.25rem; }
   @media (max-width:560px){ .main--full{ padding:1.25rem; } }
 </style>
 </head>
@@ -28,15 +30,20 @@
 
 <main class="main--full">
   <div class="page-header">
-    <div><h1>Mis mesas</h1><div class="text-muted" id="subtitulo">Mesas con pedido activo asignadas a ti</div></div>
+    <div><h1 id="titulo">Mis pedidos</h1><div class="text-muted" id="subtitulo">Pedidos asignados a ti</div></div>
     <div class="flex gap-1">
-      <button class="btn btn--outline" onclick="cargarMesas()">Actualizar</button>
-      <button class="btn btn--primary" onclick="abrirNuevo()">Nuevo pedido</button>
+      <button class="btn btn--outline" onclick="cargarTodo()">Actualizar</button>
+      <button class="btn btn--primary" id="btnNuevo" onclick="abrirNuevo()">Nuevo pedido</button>
     </div>
   </div>
 
+  <div class="tabs" role="tablist">
+    <button class="tab is-active" id="tabPedidos" role="tab" onclick="cambiarVista('pedidos')">Pedidos</button>
+    <button class="tab" id="tabMesas" role="tab" onclick="cambiarVista('mesas')">Mesas</button>
+  </div>
+
   <div id="aviso"></div>
-  <div class="mesa-grid" id="mesas"></div>
+  <div class="lista" id="lista"></div>
 </main>
 
 <!-- Modal: detalle / edición de pedido -->
@@ -72,10 +79,6 @@
         <label class="label" for="nuevaMesa">Mesa</label>
         <input class="input" id="nuevaMesa" type="number" min="1" placeholder="Número de mesa">
       </div>
-      <div class="field">
-        <label class="label" for="nuevoIncidente">Incidente (opcional)</label>
-        <textarea class="textarea" id="nuevoIncidente"></textarea>
-      </div>
     </div>
     <div class="modal__footer">
       <button class="btn btn--ghost" onclick="cerrar('mNuevo')">Cancelar</button>
@@ -87,38 +90,35 @@
 <div class="toast-stack" id="toasts"></div>
 
 <script>
-/* ================= CONFIGURACIÓN =================
-   Ajusta las rutas a tu backend. Si la API no responde,
-   la página usa datos de ejemplo (modo demo) tomados de la guía. */
+/* ================= CONFIGURACIÓN ================= */
 const TEST_USER = { cedula: '1000034908', clave: 'Chigwi23', idEmpleado: 3 };
 const AUTH_HEADER = 'Basic ' + btoa(TEST_USER.cedula + ':' + TEST_USER.clave);
 const CONFIG = {
   API: 'http://localhost:8080',
   MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || TEST_USER.idEmpleado,
   rutas: {
-    mesasEmpleado: id => `/api/ordenes/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
-    pedido:        id => `/api/ordenes/pedido/${id}`,               // GET  -> pedido completo
-    estado:        id => `/api/ordenes/pedido/estado/${id}`,        // GET  -> {pedido_id, estado}
-    pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`, 
-    crearPedido:   '/api/ordenes/pedido',                           // POST -> pedido insert dto
-    editarPedido:  id => `/api/ordenes/pedido/${id}`,               // PUT  -> pedido insert dto
-    metodoPago:    '/api/pedido/metodoDePago'                // PUT  -> {idPedido, idMetodo}
+    mesasEmpleado:     id => `/api/ordenes/mesasEmpleado/${id}`,   // GET -> [{nombreEmpleado, mesaId, estado}]
+    pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`, // GET -> [pedido completo]
+    pedido:            id => `/api/ordenes/pedido/${id}`,          // GET -> pedido completo
+    crearPedido:       '/api/ordenes/pedido',                      // POST -> { id_mesa, id_mesero }
+    editarPedido:      id => `/api/ordenes/pedido/${id}`,          // PUT  -> { id, incidente }
+    metodoPago:        '/api/pedido/metodoDePago'                  // PUT  -> { idPedido, idMetodo }
   },
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
 };
-//const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+
 /* ================= DATOS DEMO ================= */
 const DEMO = {
   mesas: [{ nombreEmpleado: 'Jane', mesaId: 2, estado: 'Pendiente' }],
-  pedido: {
+  pedidos: [{
     id_pedido: 1, mesa: { id: 2, cupo: 2, ocupada: false },
     mesero: { id_empleado: 5, nombre: 'Jane', apellido: 'Doe', correo: 'JaneDoe@outlook.com', rol: { id_rol: 2, nombre: 'mesero' } },
     estado: { id_estado: 1, nombre: 'Pendiente' },
     fecha_creacion: '2026-10-19T22:01:03.077829', fecha_ultima_actualizacion: '2026-10-19T22:13:56.165548',
     precio_total: null, metodo_de_pago: 'Tarjeta'
-  }
+  }]
 };
-let demo = false, actual = null;
+let demo = false, actual = null, vista = 'pedidos', pedidos = [], mesas = [];
 
 /* ================= UTILIDADES ================= */
 const $ = id => document.getElementById(id);
@@ -138,44 +138,76 @@ async function api(ruta, metodo = 'GET', cuerpo) {
   const headers = { 'Authorization': AUTH_HEADER };
   if (cuerpo) headers['Content-Type'] = 'application/json';
   const r = await fetch(CONFIG.API + ruta, {
-    method: metodo,
-    headers,
-    body: cuerpo ? JSON.stringify(cuerpo) : undefined
+    method: metodo, headers, body: cuerpo ? JSON.stringify(cuerpo) : undefined
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const txt = await r.text();
   return txt ? JSON.parse(txt) : null;
 }
-
 const claseEstado = e => ({ pendiente:'badge--warning', preparando:'badge--gold', 'en cocina':'badge--warning', servido:'badge--success', cancelado:'badge--danger' }[String(e).toLowerCase()] || '');
 const fecha = f => f ? new Date(f).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+const dinero = n => n == null ? 'Sin calcular' : '$' + Number(n).toLocaleString('es-CO');
 
-/* ================= MESAS DEL MESERO ================= */
-async function cargarMesas() {
-  let mesas;
-  try { mesas = await api(CONFIG.rutas.mesasEmpleado(CONFIG.MESERO_ID)); demo = false; $('aviso').innerHTML = ''; }
-  catch (e) { 
-    console.log(e);
-    mesas = DEMO.mesas; demo = true;
-    $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>'; }
-  if (!demo) {
-    const porMesa = await mapaPedidosPorMesa();
-  mesas.forEach(m => { m.pedidoId = porMesa[m.mesaId]; });
+/* ================= CARGA ================= */
+async function cargarTodo() {
+  const [rp, rm] = await Promise.allSettled([
+    api(CONFIG.rutas.pedidoPorEmpleado(CONFIG.MESERO_ID)),
+    api(CONFIG.rutas.mesasEmpleado(CONFIG.MESERO_ID))
+  ]);
+  if (rp.status === 'rejected' && rm.status === 'rejected') {
+    console.error(rp.reason, rm.reason);
+    demo = true; pedidos = DEMO.pedidos; mesas = DEMO.mesas;
+    $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>';
+  } else {
+    demo = false; $('aviso').innerHTML = '';
+    if (rp.status === 'rejected') { console.error(rp.reason); toast('No se pudieron cargar los pedidos', 'danger'); }
+    if (rm.status === 'rejected') { console.error(rm.reason); toast('No se pudieron cargar las mesas', 'danger'); }
+    const aLista = v => v == null ? [] : Array.isArray(v) ? v : [v];
+    pedidos = aLista(rp.value); mesas = aLista(rm.value);
   }
-  if (mesas[0]) { $('meseroNombre').textContent = mesas[0].nombreEmpleado; $('meseroAvatar').textContent = mesas[0].nombreEmpleado[0].toUpperCase(); }
-  $('mesas').innerHTML = mesas.length ? mesas.map(m => `
-    <div class="card mesa stat">
-      <div class="mesa__row"><span class="mesa__num">Mesa ${esc(m.mesaId)}</span>
-        <span class="badge ${claseEstado(m.estado)}">${esc(m.estado)}</span></div>
-      <div class="text-muted mb-2">Mesero: ${esc(m.nombreEmpleado)}</div>
-      <button class="btn btn--outline btn--sm btn--block" onclick="verPedido(${Number(m.pedidoId)})">Ver y editar pedido</button>
-    </div>`).join('') : '<div class="card empty" style="grid-column:1/-1">No tienes mesas asignadas. Crea un pedido para empezar.</div>';
+  const nombre = pedidos[0]?.mesero?.nombre ?? mesas[0]?.nombreEmpleado;
+  if (nombre) { $('meseroNombre').textContent = nombre; $('meseroAvatar').textContent = nombre[0].toUpperCase(); }
+  pintar();
 }
 
-/* ================= DETALLE / EDICIÓN ================= */
+function cambiarVista(v) {
+  vista = v;
+  $('tabPedidos').classList.toggle('is-active', v === 'pedidos');
+  $('tabMesas').classList.toggle('is-active', v === 'mesas');
+  pintar();
+}
+
+/* ================= PINTAR ================= */
+function pintar() {
+  const esPedidos = vista === 'pedidos';
+  $('titulo').textContent = esPedidos ? 'Mis pedidos' : 'Mis mesas';
+  $('subtitulo').textContent = esPedidos ? 'Pedidos asignados a ti' : 'Mesas asociadas a ti (solo consulta)';
+  $('btnNuevo').hidden = !esPedidos;
+
+  if (esPedidos) {
+    $('lista').innerHTML = pedidos.length ? pedidos.map(p => `
+      <div class="card item stat">
+        <div class="item__row"><span class="item__num">Pedido #${esc(p.id_pedido)}</span>
+          <span class="badge ${claseEstado(p.estado?.nombre)}">${esc(p.estado?.nombre)}</span></div>
+        <div class="item__meta text-muted">Mesa ${esc(p.mesa?.id)} · ${esc(dinero(p.precio_total))}<br>Pago: ${esc(p.metodo_de_pago ?? '—')}</div>
+        <button class="btn btn--outline btn--sm btn--block" onclick="verPedido(${Number(p.id_pedido)})">Ver y editar</button>
+      </div>`).join('')
+      : '<div class="card empty">No tienes pedidos. Crea uno con «Nuevo pedido».</div>';
+  } else {
+    $('lista').innerHTML = mesas.length ? mesas.map(m => `
+      <div class="card item stat">
+        <div class="item__row"><span class="item__num">Mesa ${esc(m.mesaId)}</span>
+          <span class="badge ${claseEstado(m.estado)}">${esc(m.estado)}</span></div>
+        <div class="text-muted">Mesero: ${esc(m.nombreEmpleado)}</div>
+      </div>`).join('')
+      : '<div class="card empty">No tienes mesas asociadas.</div>';
+  }
+}
+
+/* ================= DETALLE / EDICIÓN (solo pedidos) ================= */
 async function verPedido(id) {
-  try { actual = demo ? DEMO.pedido : await api(CONFIG.rutas.pedido(id)); }
-  catch { return toast('No se pudo cargar el pedido ' + id, 'danger'); }
+  try { actual = demo ? pedidos.find(p => p.id_pedido === id) : await api(CONFIG.rutas.pedido(id)); }
+  catch (e) { console.error(e); return toast('No se pudo cargar el pedido ' + id, 'danger'); }
   $('tPedido').textContent = 'Pedido #' + actual.id_pedido;
   $('detalle').innerHTML = `
     <dt>Mesa</dt><dd>${esc(actual.mesa?.id)} (cupo ${esc(actual.mesa?.cupo)})</dd>
@@ -183,7 +215,7 @@ async function verPedido(id) {
     <dt>Mesero</dt><dd>${esc(actual.mesero?.nombre)} ${esc(actual.mesero?.apellido)}</dd>
     <dt>Creado</dt><dd>${fecha(actual.fecha_creacion)}</dd>
     <dt>Última actualización</dt><dd>${fecha(actual.fecha_ultima_actualizacion)}</dd>
-    <dt>Total</dt><dd>${actual.precio_total == null ? 'Sin calcular' : '$' + Number(actual.precio_total).toLocaleString('es-CO')}</dd>`;
+    <dt>Total</dt><dd>${esc(dinero(actual.precio_total))}</dd>`;
   $('metodo').innerHTML = CONFIG.metodos.map(m =>
     `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
   $('incidente').value = actual.incidente || '';
@@ -197,44 +229,22 @@ async function guardarPedido() {
       await api(CONFIG.rutas.editarPedido(id), 'PUT', { id, incidente: $('incidente').value.trim() });
       await api(CONFIG.rutas.metodoPago, 'PUT', { idPedido: id, idMetodo: Number($('metodo').value) });
     }
-    cerrar('mPedido'); toast('Pedido actualizado', 'success'); cargarMesas();
-  } catch { toast('No se pudieron guardar los cambios', 'danger'); }
+    cerrar('mPedido'); toast('Pedido actualizado', 'success'); cargarTodo();
+  } catch (e) { console.error(e); toast('No se pudieron guardar los cambios', 'danger'); }
 }
 
 /* ================= NUEVO PEDIDO ================= */
-function abrirNuevo() { $('nuevaMesa').value = ''; $('nuevoIncidente').value = ''; abrir('mNuevo'); }
+function abrirNuevo() { $('nuevaMesa').value = ''; abrir('mNuevo'); }
 async function crearPedido() {
   const mesaId = Number($('nuevaMesa').value);
   if (!mesaId) return toast('Indica el número de mesa', 'danger');
-  // DTO de la guía: { id, incidente }. mesaId y meseroId son extras: ajústalos a lo que espere tu backend.
-  const dto = { id_mesa: mesaId, id_mesero: CONFIG.MESERO_ID };
   try {
-    if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', dto);
-    cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarMesas();
-  } catch { toast('No se pudo crear el pedido', 'danger'); }
+    if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', { id_mesa: mesaId, id_mesero: CONFIG.MESERO_ID });
+    cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarTodo();
+  } catch (e) { console.error(e); toast('No se pudo crear el pedido', 'danger'); }
 }
 
-/* Busca los pedidos del mesero recorriendo ids (solo pruebas, sin cambios en el backend) */
-async function mapaPedidosPorMesa() {
-  const porMesa = {};                       // { mesaId: pedidoId más reciente }
-  const LOTE = 20, MAX_ID = 500;
-  for (let desde = 1; desde <= MAX_ID; desde += LOTE) {
-    const ids = Array.from({ length: LOTE }, (_, i) => desde + i);
-    const res = await Promise.allSettled(ids.map(i => api(CONFIG.rutas.pedido(i))));
-    res.forEach(r => {
-      if (r.status !== 'fulfilled' || !r.value) return;
-      const p = r.value;
-      const esMio = p.mesero?.id_empleado === CONFIG.MESERO_ID;
-      const mesaId = p.mesa?.id;
-      if (esMio && mesaId != null && (!porMesa[mesaId] || p.id_pedido > porMesa[mesaId]))
-        porMesa[mesaId] = p.id_pedido;
-    });
-    if (res.every(r => r.status === 'rejected')) break;   // lote entero sin pedidos: se acabaron
-  }
-  return porMesa;
-}
-
-cargarMesas();
+cargarTodo();
 </script>
 </body>
 </html>
