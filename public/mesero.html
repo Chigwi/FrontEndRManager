@@ -99,6 +99,7 @@ const CONFIG = {
     mesasEmpleado: id => `/api/ordenes/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
     pedido:        id => `/api/ordenes/pedido/${id}`,               // GET  -> pedido completo
     estado:        id => `/api/ordenes/pedido/estado/${id}`,        // GET  -> {pedido_id, estado}
+    pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`, 
     crearPedido:   '/api/ordenes/pedido',                           // POST -> pedido insert dto
     editarPedido:  id => `/api/ordenes/pedido/${id}`,               // PUT  -> pedido insert dto
     metodoPago:    '/api/pedido/metodoDePago'                // PUT  -> {idPedido, idMetodo}
