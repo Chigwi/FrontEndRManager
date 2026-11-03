@@ -152,7 +152,9 @@ const fecha = f => f ? new Date(f).toLocaleString('es-CO', { dateStyle: 'medium'
 async function cargarMesas() {
   let mesas;
   try { mesas = await api(CONFIG.rutas.mesasEmpleado(CONFIG.MESERO_ID)); demo = false; $('aviso').innerHTML = ''; }
-  catch { mesas = DEMO.mesas; demo = true;
+  catch (e) { 
+    console.log(e);
+    mesas = DEMO.mesas; demo = true;
     $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>'; }
   if (mesas[0]) { $('meseroNombre').textContent = mesas[0].nombreEmpleado; $('meseroAvatar').textContent = mesas[0].nombreEmpleado[0].toUpperCase(); }
   $('mesas').innerHTML = mesas.length ? mesas.map(m => `
