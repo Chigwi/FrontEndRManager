@@ -61,7 +61,7 @@
       <a href="#panel" data-nav="panel" class="is-active">Panel</a>
       <a href="#empleados" data-nav="empleados">Empleados</a>
       <a href="#ordenes" data-nav="ordenes">Órdenes</a>
-      <a href="#menu" data-nav="menu">Menú</a>
+      <a href="admin-menu.html">Menú</a>
     </div>
   </aside>
 
@@ -91,7 +91,7 @@
           <h2>Órdenes</h2>
           <p>Revisa y da seguimiento a las órdenes del servicio.</p>
         </a>
-        <a class="option" href="#menu">
+        <a class="option" href="admin-menu.html">
           <div class="option__icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2v9M10 3v7a2 2 0 0 1-2 2M18 21V3c-2.5 1-4 4-4 8 0 2 1 3 4 3"/></svg>
           </div>
@@ -490,7 +490,7 @@
     $confirmYes.disabled = true;
     $confirmError.hidden = true;
     try {
-      const res = await fetch(API + '/empleado/empleados/' + seleccionado.id_empleado, { method: 'DELETE', ...AUTH });
+      const res = await fetch(API + '/empleados/' + seleccionado.id_empleado, { method: 'DELETE', ...AUTH });
       if (!res.ok) throw new Error(await mensajeDeError(res));
       $confirm.classList.remove('is-open');
       cerrarDetalle();

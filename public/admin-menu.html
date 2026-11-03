@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menú · Administración</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .toolbar .input { max-width: 320px; }
+  .toolbar .select { max-width: 220px; }
+  .toolbar .btn { margin-left: auto; }
+  .empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
+  .table tbody tr.is-clickable { cursor: pointer; }
+  .price { font-weight: 700; color: var(--gold-dark); white-space: nowrap; }
+  .detail-list { display: grid; grid-template-columns: 120px 1fr; gap: .75rem 1rem; margin: 0; }
+  .detail-list dt { color: var(--gray-500); font-weight: 500; }
+  .detail-list dd { margin: 0; font-weight: 500; word-break: break-word; }
+  .badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .breadcrumb { margin-bottom: .75rem; font-size: .9rem; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="admin.html#panel"><span>&#9670;</span> Maison Ledger</a>
+  <div class="navbar__actions">
+    <span class="badge badge--dark">Administrador</span>
+    <span class="avatar" title="Admin">AD</span>
+  </div>
+</nav>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__title">Administración</div>
+      <a href="admin.html#panel">Panel</a>
+      <a href="admin.html#empleados">Empleados</a>
+      <a href="admin.html#ordenes">Órdenes</a>
+      <a class="is-active" href="admin-menu.html">Menú</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="breadcrumb"><a href="admin.html#panel">Panel</a> / Menú</div>
+    <div class="page-header"><h1>Menú</h1></div>
+
+    <div class="toolbar">
+      <input class="input" id="buscar" type="search" placeholder="Buscar producto" aria-label="Buscar producto">
+      <select class="select" id="filtro-cat" aria-label="Filtrar por categoría"></select>
+      <button class="btn btn--primary" id="btn-agregar">Agregar producto</button>
+    </div>
+
+    <div class="card">
+      <div class="empty" id="estado">Cargando menú…</div>
+      <div class="table-wrap" id="tabla" hidden>
+        <table class="table">
+          <thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Estado</th></tr></thead>
+          <tbody id="cuerpo"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Detalle -->
+<div class="modal-backdrop" id="m-detalle">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-nombre">
+    <div class="modal__header">
+      <h2 class="modal__title" id="d-nombre"></h2>
+      <button class="modal__close" data-close aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <dl class="detail-list">
+        <dt>Precio</dt><dd id="d-precio"></dd>
+        <dt>Categoría</dt><dd id="d-cat"></dd>
+        <dt>Estado</dt><dd><div class="badges" id="d-badges"></div></dd>
+        <dt>Descripción</dt><dd id="d-desc"></dd>
+      </dl>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--danger" id="btn-eliminar" style="margin-right:auto">Eliminar</button>
+      <button class="btn btn--outline" id="btn-editar">Editar</button>
+      <button class="btn btn--dark" data-close>Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Crear / editar -->
+<div class="modal-backdrop" id="m-form">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="f-titulo">
+    <form id="form" novalidate>
+      <div class="modal__header">
+        <h2 class="modal__title" id="f-titulo"></h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="f-error" hidden></div>
+        <div class="field"><label class="label" for="f-nombre">Nombre</label><input class="input" id="f-nombre" required></div>
+        <div class="field"><label class="label" for="f-desc">Descripción</label><textarea class="textarea" id="f-desc"></textarea></div>
+        <div class="form-row">
+          <div class="field"><label class="label" for="f-precio">Precio</label><input class="input" id="f-precio" type="number" step="0.01" min="0" required></div>
+          <div class="field"><label class="label" for="f-cat">Categoría</label><select class="select" id="f-cat" required></select></div>
+        </div>
+        <label class="check mb-2"><input type="checkbox" id="f-disp" checked> Disponible</label>
+        <label class="check"><input type="checkbox" id="f-dia"> Menú del día</label>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="f-guardar">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmar eliminación -->
+<div class="modal-backdrop" id="m-confirm">
+  <div class="modal modal--sm" role="alertdialog" aria-modal="true" aria-labelledby="c-titulo">
+    <div class="modal__header"><h2 class="modal__title" id="c-titulo">¿Eliminar producto?</h2></div>
+    <div class="modal__body">
+      <p id="c-texto" style="margin:0"></p>
+      <div class="alert alert--danger mt-2" id="c-error" hidden></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" data-close>Cancelar</button>
+      <button class="btn btn--danger" id="c-si">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+  // ---------- Configuración (solo para pruebas) ----------
+  const API = 'http://localhost:8080/api';
+  const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+  const JSON_HEADERS = { 'Content-Type': 'application/json', ...AUTH.headers };
+
+  // Endpoints
+  const URL_LISTA    = API + '/menu';                   // GET
+  const urlDetalle   = id => API + '/menu/' + id;       // GET
+  const URL_CREAR    = API + '/menu';                   // POST
+  const urlEditar    = id => API + '/menu/' + id;       // PUT
+  const urlEliminar  = id => API + '/menu/' + id;       // DELETE
+
+  // Categorías (id_categoria + nombre). También se agregan las que vengan en los productos.
+  // OJO: solo sé con certeza que "Bebidas frias" es el id 2. Los demás ids los asumí
+  // siguiendo el orden de tu lista; corrígelos si en la base de datos son otros.
+  const CATEGORIAS_BASE = [
+    { id_categoria: 1, nombre: 'Bebidas calientes' },
+    { id_categoria: 2, nombre: 'Bebidas frias' },
+    { id_categoria: 3, nombre: 'Postres' },
+    { id_categoria: 4, nombre: 'Hamburguesas' },
+    { id_categoria: 5, nombre: 'Pizzas' },
+    { id_categoria: 6, nombre: 'Sopas' },
+    { id_categoria: 7, nombre: 'Desayunos' },
+    { id_categoria: 8, nombre: 'Almuerzos' }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const moneda = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  let productos = [];
+  let seleccionado = null;
+  let tokenDetalle = 0;
+
+  // ---------- Utilidades ----------
+  function toast(msg, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+  async function errorHttp(res) {
+    let d = '';
+    try { d = (await res.text()).slice(0, 200); } catch (_) {}
+    return 'Error ' + res.status + (d ? ': ' + d : '');
+  }
+  function badge(texto, clase) {
+    const s = document.createElement('span');
+    s.className = 'badge ' + clase;
+    s.textContent = texto;
+    return s;
+  }
+  function estadoBadges(p) {
+    const frag = document.createDocumentFragment();
+    frag.appendChild(p.disponible ? badge('Disponible', 'badge--success') : badge('Agotado', 'badge--danger'));
+    if (p.es_menu_del_dia) frag.appendChild(badge('Menú del día', 'badge--gold'));
+    return frag;
+  }
+  function categoriasDisponibles() {
+    const m = new Map(CATEGORIAS_BASE.map(c => [c.id_categoria, c]));
+    productos.forEach(p => { if (p.categoria) m.set(p.categoria.id_categoria, p.categoria); });
+    return [...m.values()].sort((a, b) => a.id_categoria - b.id_categoria);
+  }
+  function llenarSelect(sel, categorias, conTodas, valor) {
+    sel.replaceChildren();
+    if (conTodas) {
+      const o = document.createElement('option');
+      o.value = ''; o.textContent = 'Todas las categorías';
+      sel.appendChild(o);
+    }
+    categorias.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id_categoria; o.textContent = c.nombre;
+      sel.appendChild(o);
+    });
+    sel.value = valor == null ? '' : String(valor);
+  }
+
+  // ---------- Modales ----------
+  document.querySelectorAll('.modal-backdrop').forEach(b => {
+    b.addEventListener('click', e => { if (e.target === b) b.classList.remove('is-open'); });
+    b.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', () => b.classList.remove('is-open')));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const abiertos = document.querySelectorAll('.modal-backdrop.is-open');
+    if (abiertos.length) abiertos[abiertos.length - 1].classList.remove('is-open');
+  });
+
+  // ---------- Lista ----------
+  function setEstado(msg, esError) {
+    $('estado').textContent = msg;
+    $('estado').style.color = esError ? 'var(--danger)' : '';
+    $('estado').hidden = false;
+    $('tabla').hidden = true;
+    if (esError) {
+      const b = document.createElement('button');
+      b.className = 'btn btn--outline btn--sm';
+      b.style.marginTop = '1rem';
+      b.textContent = 'Reintentar';
+      b.addEventListener('click', cargar);
+      $('estado').append(document.createElement('br'), b);
+    }
+  }
+
+  async function cargar() {
+    setEstado('Cargando menú…');
+    try {
+      const res = await fetch(URL_LISTA, AUTH);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      productos = await res.json();
+      llenarSelect($('filtro-cat'), categoriasDisponibles(), true, $('filtro-cat').value);
+      render();
+    } catch (err) {
+      console.error(err);
+      setEstado('No se pudo cargar el menú.', true);
+    }
+  }
+
+  function render() {
+    const q = norm($('buscar').value.trim());
+    const cat = $('filtro-cat').value;
+    const lista = productos
+      .filter(p => (!cat || String(p.categoria && p.categoria.id_categoria) === cat) && (!q || norm(p.nombre).includes(q)))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+    if (!lista.length) {
+      setEstado(productos.length ? 'Sin resultados para los filtros.' : 'No hay productos en el menú.');
+      return;
+    }
+    $('cuerpo').replaceChildren();
+    lista.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.className = 'is-clickable';
+      tr.tabIndex = 0;
+      const nombre = document.createElement('td'); nombre.textContent = p.nombre;
+      const cat = document.createElement('td'); cat.textContent = p.categoria ? p.categoria.nombre : '—';
+      const precio = document.createElement('td'); precio.className = 'price'; precio.textContent = moneda(p.precio);
+      const estado = document.createElement('td');
+      const wrap = document.createElement('div'); wrap.className = 'badges';
+      wrap.appendChild(estadoBadges(p));
+      estado.appendChild(wrap);
+      tr.append(nombre, cat, precio, estado);
+      tr.addEventListener('click', () => abrirDetalle(p));
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter') abrirDetalle(p); });
+      $('cuerpo').appendChild(tr);
+    });
+    $('estado').hidden = true;
+    $('tabla').hidden = false;
+  }
+
+  $('buscar').addEventListener('input', () => { if (productos.length) render(); });
+  $('filtro-cat').addEventListener('change', () => { if (productos.length) render(); });
+
+  // ---------- Detalle ----------
+  function pintarDetalle(p) {
+    $('d-nombre').textContent = p.nombre;
+    $('d-precio').textContent = moneda(p.precio);
+    $('d-cat').textContent = p.categoria ? p.categoria.nombre : '—';
+    $('d-desc').textContent = p.descripcion || 'Sin descripción';
+    $('d-badges').replaceChildren(estadoBadges(p));
+  }
+
+  async function abrirDetalle(p) {
+    seleccionado = p;
+    const token = ++tokenDetalle;
+    pintarDetalle(p);                       // se muestra de inmediato lo ya cargado
+    $('m-detalle').classList.add('is-open');
+    try {                                   // y se refresca con el detalle del backend
+      const res = await fetch(urlDetalle(p.id_producto), AUTH);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (token === tokenDetalle) { seleccionado = d; pintarDetalle(d); }
+    } catch (err) {
+      console.error(err);                   // si falla, se queda con los datos de la lista
+    }
+  }
+
+  // ---------- Crear / editar ----------
+  let editando = null;
+
+  function abrirForm(p) {
+    editando = p;
+    $('form').reset();
+    $('f-error').hidden = true;
+    $('f-titulo').textContent = p ? 'Editar producto' : 'Nuevo producto';
+    llenarSelect($('f-cat'), categoriasDisponibles(), false, p && p.categoria ? p.categoria.id_categoria : null);
+    if (p) {
+      $('f-nombre').value = p.nombre;
+      $('f-desc').value = p.descripcion || '';
+      $('f-precio').value = p.precio;
+      $('f-disp').checked = !!p.disponible;
+      $('f-dia').checked = !!p.es_menu_del_dia;
+    }
+    $('m-form').classList.add('is-open');
+    $('f-nombre').focus();
+  }
+
+  $('btn-agregar').addEventListener('click', () => abrirForm(null));
+  $('btn-editar').addEventListener('click', () => { if (seleccionado) abrirForm(seleccionado); });
+
+  $('form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const err = msg => { $('f-error').textContent = msg; $('f-error').hidden = false; };
+    $('f-error').hidden = true;
+
+    const nombre = $('f-nombre').value.trim();
+    const precio = parseFloat($('f-precio').value);
+    const sel = $('f-cat');
+    if (!nombre) return err('Escribe el nombre del producto.');
+    if (!Number.isFinite(precio) || precio < 0) return err('Escribe un precio válido.');
+    if (!sel.value) return err('Selecciona una categoría.');
+
+    const body = {
+      nombre,
+      descripcion: $('f-desc').value.trim(),
+      precio,
+      categoria: { id_categoria: Number(sel.value), nombre: sel.options[sel.selectedIndex].textContent },
+      disponible: $('f-disp').checked,
+      es_menu_del_dia: $('f-dia').checked
+    };
+    if (editando) body.id_producto = editando.id_producto;
+
+    $('f-guardar').disabled = true;
+    try {
+      const res = await fetch(editando ? urlEditar(editando.id_producto) : URL_CREAR, {
+        method: editando ? 'PUT' : 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(await errorHttp(res));
+      $('m-form').classList.remove('is-open');
+      if (editando) $('m-detalle').classList.remove('is-open');
+      toast(editando ? 'Producto actualizado.' : 'Producto creado.', 'success');
+      cargar();
+    } catch (e) {
+      console.error(e);
+      err('No se pudo guardar el producto. ' + e.message);
+    } finally {
+      $('f-guardar').disabled = false;
+    }
+  });
+
+  // ---------- Eliminar ----------
+  $('btn-eliminar').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $('c-error').hidden = true;
+    $('c-texto').textContent = 'Se eliminará "' + seleccionado.nombre + '" del menú. Esta acción no se puede deshacer.';
+    $('m-confirm').classList.add('is-open');
+  });
+
+  $('c-si').addEventListener('click', async () => {
+    if (!seleccionado) return;
+    $('c-si').disabled = true;
+    $('c-error').hidden = true;
+    try {
+      const res = await fetch(urlEliminar(seleccionado.id_producto), { method: 'DELETE', ...AUTH });
+      if (!res.ok) throw new Error(await errorHttp(res));
+      $('m-confirm').classList.remove('is-open');
+      $('m-detalle').classList.remove('is-open');
+      seleccionado = null;
+      toast('Producto eliminado.', 'success');
+      cargar();
+    } catch (e) {
+      console.error(e);
+      $('c-error').textContent = 'No se pudo eliminar. ' + e.message;
+      $('c-error').hidden = false;
+    } finally {
+      $('c-si').disabled = false;
+    }
+  });
+
+  cargar();
+</script>
+</body>
+</html>
