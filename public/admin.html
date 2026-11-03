@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Panel de administración</title>
 <link rel="stylesheet" href="theme.css">
+<script src="auth.js"></script>
+<script>Auth.require(); // sin sesión, vuelve a login.html</script>
 <style>
   /* Admin page only */
   .view { display: none; }
@@ -46,12 +48,8 @@
 <body>
 
 <nav class="navbar">
-  <a class="navbar__brand" href="#panel"><span>&#9670;</span> R-Manager</a>
-  <div class="navbar__actions">
-    <span class="badge badge--dark">Administrador</span>
-    <span class="avatar" title="Admin">AD</span>
-    <button class="btn btn--outline btn--sm" style="color:var(--white);border-color:var(--gray-700)">Cerrar sesión</button>
-  </div>
+  <a class="navbar__brand" href="#panel"><span>&#9670;</span> R-manager</a>
+  <div class="navbar__actions"></div>
 </nav>
 
 <div class="app">
@@ -622,5 +620,6 @@
   window.addEventListener('hashchange', show);
   show();
 </script>
+<script src="usermenu.js"></script>
 </body>
 </html>

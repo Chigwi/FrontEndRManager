@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Menú · Administración</title>
 <link rel="stylesheet" href="theme.css">
+<script src="auth.js"></script>
+<script>Auth.require(); // sin sesión, vuelve a login.html</script>
 <style>
   .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .toolbar .input { max-width: 320px; }
@@ -23,11 +25,8 @@
 <body>
 
 <nav class="navbar">
-  <a class="navbar__brand" href="admin.html#panel"><span>&#9670;</span> R-Manager</a>
-  <div class="navbar__actions">
-    <span class="badge badge--dark">Administrador</span>
-    <span class="avatar" title="Admin">AD</span>
-  </div>
+  <a class="navbar__brand" href="admin.html#panel"><span>&#9670;</span> R-manager</a>
+  <div class="navbar__actions"></div>
 </nav>
 
 <div class="app">
@@ -406,5 +405,6 @@
 
   cargar();
 </script>
+<script src="usermenu.js"></script>
 </body>
 </html>
