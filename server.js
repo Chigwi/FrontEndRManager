@@ -12,7 +12,7 @@ app.get('/api/test', (req, res) => {
 
 // Add this before app.listen()
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/login.html');
+    res.sendFile(__dirname + '/public/menu.html');
 });
 
 app.listen(port, () => {
