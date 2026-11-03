@@ -123,7 +123,7 @@
   const URL_ACTIVAS   = API + '/ordenes/mesasActivas';            // GET
   const urlMesasEmp   = id => API + '/ordenes/mesasEmpleado/' + id; // GET
   const URL_PENDIENTES = API + '/ordenes/pedido/pendientes';      // GET
-  const urlPorEstado  = estado => API + '/ordenes/pedido/estado/' + encodeURIComponent(estado); // GET
+  const urlPorEstado  = estado => API + '/ordenes/pedido/estados/' + encodeURIComponent(estado); // GET
 
   const ESTADOS_BASE = ['Pendiente'];   // se completan con los estados que aparezcan en las órdenes
 
