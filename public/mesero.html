@@ -163,7 +163,7 @@ async function cargarMesas() {
       <div class="mesa__row"><span class="mesa__num">Mesa ${esc(m.mesaId)}</span>
         <span class="badge ${claseEstado(m.estado)}">${esc(m.estado)}</span></div>
       <div class="text-muted mb-2">Mesero: ${esc(m.nombreEmpleado)}</div>
-      <button class="btn btn--outline btn--sm btn--block" onclick="verPedido(${Number(m.pedidoId ?? m.mesaId)})">Ver y editar pedido</button>
+      <button class="btn btn--outline btn--sm btn--block" onclick="verPedido(${Number(m.pedido)})">Ver y editar pedido</button>
     </div>`).join('') : '<div class="card empty" style="grid-column:1/-1">No tienes mesas asignadas. Crea un pedido para empezar.</div>';
 }
 
