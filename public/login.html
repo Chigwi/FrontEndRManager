@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iniciar sesión · Maison Ledger</title>
+<title>Iniciar sesión · R-Manager</title>
 <link rel="stylesheet" href="theme.css">
 <style>
   body { background: var(--black); }
@@ -61,12 +61,12 @@
 <body>
 <div class="login">
   <section class="login__brand">
-    <div class="login__logo"><span>&#9670;</span>Maison Ledger</div>
+    <div class="login__logo"><span>&#9670;</span>R-Manager</div>
     <div>
       <h1 class="login__headline">Tu restaurante, bajo control.</h1>
       <p class="login__sub">Pedidos, mesas, inventario y personal en un solo lugar.</p>
     </div>
-    <p class="login__foot">&copy; 2026 Maison Ledger</p>
+    <p class="login__foot">&copy; 2026 R-Manager</p>
   </section>
 
   <main class="login__panel">
@@ -161,7 +161,7 @@ function validate() {
              o el empleado: { nombre, apellido, cedula, correo, rol: { id_rol, nombre } }
              (si también devuelve token: { token, user: {...} })
    --------------------------------------------------------- */
-const API_LOGIN_URL = '/api/empleado/login'; // si tu API está en otro dominio: 'https://tu-dominio.com/api/empleado/login'
+const API_LOGIN_URL = 'http://localhost:8080/api/empleado/login'; // dirección completa de tu backend
 
 async function authenticate(cedulaValue, passwordValue) {
   const res = await fetch(API_LOGIN_URL, {
