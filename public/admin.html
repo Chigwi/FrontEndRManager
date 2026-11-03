@@ -162,8 +162,10 @@
       </dl>
     </div>
     <div class="modal__footer">
-      <button class="btn btn--danger" id="emp-delete" style="margin-right:auto">Eliminar empleado</button>
-      <button class="btn btn--outline" id="emp-modal-ok">Cerrar</button>
+      <button class="btn btn--danger" id="emp-delete" style="margin-right:auto">Eliminar</button>
+      <button class="btn btn--outline" id="emp-edit-rol">Cambiar rol</button>
+      <button class="btn btn--outline" id="emp-edit-pass">Cambiar contraseña</button>
+      <button class="btn btn--dark" id="emp-modal-ok">Cerrar</button>
     </div>
   </div>
 </div>
@@ -209,6 +211,49 @@
       <button class="btn btn--outline" data-close>Cancelar</button>
       <button class="btn btn--danger" id="confirm-yes">Sí, eliminar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: cambiar rol -->
+<div class="modal-backdrop" id="modal-rol">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="rol-title">
+    <form id="form-rol">
+      <div class="modal__header">
+        <h2 class="modal__title" id="rol-title">Cambiar rol</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="rol-error" hidden></div>
+        <p id="rol-text" class="text-muted"></p>
+        <div class="field" style="margin-bottom:0"><label class="label" for="r-rol">Nuevo rol</label><select class="select" id="r-rol"></select></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="rol-submit">Guardar rol</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: cambiar contraseña -->
+<div class="modal-backdrop" id="modal-pass">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="pass-title">
+    <form id="form-pass">
+      <div class="modal__header">
+        <h2 class="modal__title" id="pass-title">Cambiar contraseña</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="pass-error" hidden></div>
+        <p id="pass-text" class="text-muted"></p>
+        <div class="field"><label class="label" for="p-nueva">Nueva contraseña</label><input class="input" id="p-nueva" type="password" autocomplete="new-password"></div>
+        <div class="field" style="margin-bottom:0"><label class="label" for="p-confirmar">Confirmar contraseña</label><input class="input" id="p-confirmar" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="pass-submit">Guardar contraseña</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -458,6 +503,111 @@
       $confirmError.hidden = false;
     } finally {
       $confirmYes.disabled = false;
+    }
+  });
+
+  // ---------- Cambiar rol ----------
+  // PUT /api/empleado/empleados/rol/{id}  con el id del rol como cuerpo (1 mesero, 2 cocinero, 3 admin)
+  const $modalRol = document.getElementById('modal-rol');
+  const $rolSelect = document.getElementById('r-rol');
+  const $rolError = document.getElementById('rol-error');
+  const $rolSubmit = document.getElementById('rol-submit');
+
+  document.getElementById('emp-edit-rol').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $rolError.hidden = true;
+    document.getElementById('rol-text').textContent = seleccionado.nombre + ' ' + seleccionado.apellido;
+    $rolSelect.replaceChildren();
+    rolesDisponibles().forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.id_rol;
+      o.textContent = r.nombre;
+      if (seleccionado.rol && seleccionado.rol.id_rol === r.id_rol) o.selected = true;
+      $rolSelect.appendChild(o);
+    });
+    $modalRol.classList.add('is-open');
+    $rolSelect.focus();
+  });
+
+  document.getElementById('form-rol').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (!seleccionado) return;
+    const idRol = Number($rolSelect.value);
+    const nombreRol = $rolSelect.options[$rolSelect.selectedIndex].textContent;
+
+    $rolSubmit.disabled = true;
+    $rolError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleado/empleados/rol/' + seleccionado.id_empleado, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify(idRol)
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      seleccionado.rol = { id_rol: idRol, nombre: nombreRol };
+      document.getElementById('d-rol').textContent = nombreRol;
+      $modalRol.classList.remove('is-open');
+      toast('Rol actualizado.', 'success');
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $rolError.textContent = 'No se pudo cambiar el rol. ' + err.message;
+      $rolError.hidden = false;
+    } finally {
+      $rolSubmit.disabled = false;
+    }
+  });
+
+  // ---------- Cambiar contraseña ----------
+  // PUT /api/empleado/empleados/contrasenna  con { id, contrasenna }
+  const $modalPass = document.getElementById('modal-pass');
+  const $passForm = document.getElementById('form-pass');
+  const $passError = document.getElementById('pass-error');
+  const $passSubmit = document.getElementById('pass-submit');
+
+  document.getElementById('emp-edit-pass').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $passForm.reset();
+    $passError.hidden = true;
+    document.getElementById('pass-text').textContent = seleccionado.nombre + ' ' + seleccionado.apellido;
+    $modalPass.classList.add('is-open');
+    document.getElementById('p-nueva').focus();
+  });
+
+  $passForm.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (!seleccionado) return;
+    const nueva = document.getElementById('p-nueva').value;
+    const confirmar = document.getElementById('p-confirmar').value;
+
+    if (!nueva) {
+      $passError.textContent = 'Escribe la nueva contraseña.';
+      $passError.hidden = false;
+      return;
+    }
+    if (nueva !== confirmar) {
+      $passError.textContent = 'Las contraseñas no coinciden.';
+      $passError.hidden = false;
+      return;
+    }
+
+    $passSubmit.disabled = true;
+    $passError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleado/empleados/contrasenna', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify({ id: String(seleccionado.id_empleado), contrasenna: nueva })
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $modalPass.classList.remove('is-open');
+      toast('Contraseña actualizada.', 'success');
+    } catch (err) {
+      console.error(err);
+      $passError.textContent = 'No se pudo cambiar la contraseña. ' + err.message;
+      $passError.hidden = false;
+    } finally {
+      $passSubmit.disabled = false;
     }
   });
 
