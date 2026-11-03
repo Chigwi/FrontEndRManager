@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iniciar sesión · R-Manager</title>
+<title>Iniciar sesión · Maison Ledger</title>
 <link rel="stylesheet" href="theme.css">
 <style>
   body { background: var(--black); }
@@ -61,12 +61,12 @@
 <body>
 <div class="login">
   <section class="login__brand">
-    <div class="login__logo"><span>&#9670;</span>R-Manager</div>
+    <div class="login__logo"><span>&#9670;</span>Maison Ledger</div>
     <div>
       <h1 class="login__headline">Tu restaurante, bajo control.</h1>
       <p class="login__sub">Pedidos, mesas, inventario y personal en un solo lugar.</p>
     </div>
-    <p class="login__foot">&copy; 2026 R-Manager</p>
+    <p class="login__foot">&copy; 2026 Maison Ledger</p>
   </section>
 
   <main class="login__panel">
@@ -76,7 +76,7 @@
 
       <div class="alert alert--danger" id="formError" role="alert" hidden></div>
 
-      <form id="loginForm" novalidate>
+      <form id="loginForm" method="post" action="javascript:void(0)" novalidate>
         <div class="field">
           <label class="label" for="cedula">Cédula</label>
           <input class="input" id="cedula" name="cedula" type="text" inputmode="numeric"
@@ -169,11 +169,21 @@ async function authenticate(cedulaValue, passwordValue) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cedula: cedulaValue, contrasenna: passwordValue })
   });
-  const data = res.ok ? await res.json().catch(() => null) : null;
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = undefined; }
 
-  // null = credenciales inválidas
-  if (!data) {
+  // Para depurar: abre la consola del navegador (F12) y mira estas líneas
+  console.log('[login] URL:', res.url, '| estado:', res.status, '| respuesta:', text);
+
+  if (res.status === 401 || res.status === 403 || (res.ok && data === null)) {
     return { ok: false, message: 'Cédula o contraseña incorrecta. Revisa los datos e inténtalo de nuevo.' };
+  }
+  if (!res.ok) {
+    return { ok: false, message: 'El servidor respondió con error ' + res.status + '. Revisa la URL del login (API_LOGIN_URL) y que el backend esté encendido.' };
+  }
+  if (data === undefined || typeof data !== 'object') {
+    return { ok: false, message: 'El servidor respondió algo que no es un empleado en JSON. Revisa la consola (F12).' };
   }
   const user = data.user || data;
   return { ok: true, token: data.token || null, user: { ...user, cedula: user.cedula || cedulaValue } };
@@ -200,7 +210,8 @@ form.addEventListener('submit', async e => {
       formError.hidden = false;
     }
   } catch (err) {
-    formError.textContent = 'No pudimos conectar con el servidor. Inténtalo de nuevo en unos minutos.';
+    console.error('[login] error:', err);
+    formError.textContent = 'No pudimos conectar con el servidor. Revisa que el backend esté encendido, la URL y el CORS.';
     formError.hidden = false;
   } finally {
     submitBtn.classList.remove('is-loading');
