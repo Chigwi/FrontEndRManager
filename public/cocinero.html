@@ -364,7 +364,7 @@ async function cambiarEstado(id, idEstado) {
       toast(`Pedido #${id} entregado`, 'success');
     } else {
       pedidos = pedidos.map(p => p.id === id ? { ...p, idEstado } : p);
-      toast(`Pedido #${id} en preparación`);
+      toast(`Pedido #${id} En preparación`, 'success');
     }
   } catch (e) {
     toast(`No se pudo actualizar el pedido #${id}. Intenta de nuevo.`, 'danger');
