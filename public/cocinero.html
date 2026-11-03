@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cocina · Maison Ledger</title>
 <link rel="stylesheet" href="theme.css">
+<script src="auth.js"></script>
+<script>Auth.require(['cocinero', 'admin']); // sin sesión vuelve a login.html; otros roles van a su pantalla</script>
 <style>
   /* Solo lo específico de esta pantalla; todo lo demás viene de theme.css */
   .orders { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
@@ -25,20 +27,73 @@
   .empty h3 { margin-bottom: .25rem; }
   .skeleton { height: 200px; background: linear-gradient(90deg, var(--gray-100), var(--gray-50), var(--gray-100)); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
   @keyframes sk { to { background-position: -200% 0; } }
-  .navbar__user { color: var(--gray-300); font-size: .9rem; }
-  @media (max-width: 560px) { .navbar__user { display: none; } }
+
+  /* ---------- Menú de usuario y cierre de sesión ---------- */
+  .user-btn {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .25rem .6rem .25rem .25rem; font: inherit; color: var(--white);
+    background: transparent; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .user-btn:hover, .dropdown.is-open .user-btn { background: rgba(255,255,255,.08); border-color: var(--gold); }
+  .user-btn__text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; text-align: left; }
+  .user-btn__name { font-weight: 600; font-size: .9rem; }
+  .user-btn__rol { font-size: .75rem; color: var(--gold-light); text-transform: capitalize; }
+  .user-btn__chev { width: 8px; height: 8px; border-right: 2px solid var(--gray-300); border-bottom: 2px solid var(--gray-300); transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+  .dropdown.is-open .user-btn__chev { transform: rotate(-135deg) translateY(-2px); }
+  .user-menu { min-width: 270px; padding: 0; overflow: hidden; }
+  .user-card { display: flex; align-items: center; gap: .8rem; padding: 1rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+  .user-card .avatar { width: 44px; height: 44px; font-size: 1rem; flex: none; }
+  .user-card__name { font-weight: 600; color: var(--black); line-height: 1.2; }
+  .user-card__mail { font-size: .82rem; color: var(--gray-500); overflow-wrap: anywhere; }
+  .user-card .badge { margin-top: .35rem; text-transform: capitalize; }
+  .user-menu__list { padding: .35rem; }
+  .dropdown__item--icon { display: flex; align-items: center; gap: .65rem; font-weight: 500; }
+  .dropdown__item--danger:hover { background: var(--danger-bg); }
+  .dropdown__item svg { width: 18px; height: 18px; flex: none; }
+  .modal__icon { width: 48px; height: 48px; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--danger-bg); color: var(--danger); }
+  .modal__icon svg { width: 24px; height: 24px; }
+  @media (max-width: 700px) {
+    .user-btn__text { display: none; }
+    .user-btn { padding-right: .5rem; }
+  }
 </style>
 </head>
 <body>
 
 <nav class="navbar">
-  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <a class="navbar__brand" href="cocina.html"><span>&#9670;</span> Maison Ledger</a>
   <ul class="navbar__links">
-    <li><a class="is-active" href="#">Cocina</a></li>
+    <li><a class="is-active" href="cocina.html">Cocina</a></li>
   </ul>
+
   <div class="navbar__actions">
-    <span class="navbar__user" id="nombreEmpleado">Cocinero</span>
-    <span class="avatar" id="avatar">CO</span>
+    <div class="dropdown" id="userDropdown">
+      <button class="user-btn" id="btnUsuario" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menú de usuario">
+        <span class="avatar" id="uAvatar">?</span>
+        <span class="user-btn__text">
+          <span class="user-btn__name" id="uNombre">Usuario</span>
+          <span class="user-btn__rol" id="uRol"></span>
+        </span>
+        <span class="user-btn__chev" aria-hidden="true"></span>
+      </button>
+      <div class="dropdown__menu user-menu" role="menu">
+        <div class="user-card">
+          <span class="avatar" id="uAvatar2">?</span>
+          <div>
+            <div class="user-card__name" id="uNombre2">Usuario</div>
+            <div class="user-card__mail" id="uCorreo"></div>
+            <span class="badge badge--dark" id="uRol2"></span>
+          </div>
+        </div>
+        <div class="user-menu__list">
+          <button class="dropdown__item dropdown__item--icon dropdown__item--danger" id="btnSalir" type="button" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </nav>
 
@@ -62,30 +117,46 @@
 
 <div class="toast-stack" id="toasts"></div>
 
+<!-- Confirmación de cierre de sesión -->
+<div class="modal-backdrop" id="salir">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="sTitulo">
+    <div class="modal__body">
+      <div class="modal__icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+      <h2 class="modal__title" id="sTitulo">¿Cerrar sesión?</h2>
+      <p class="text-muted" style="margin:.5rem 0 0">Tendrás que ingresar de nuevo con tu cédula y contraseña.</p>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" id="sCancelar" type="button">Seguir aquí</button>
+      <button class="btn btn--danger" id="sConfirmar" type="button">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============ Configuración ============ */
-const API_BASE = '';  // Ej: 'https://mi-servidor.com'. Vacío = mismo dominio.
+const API_BASE = 'http://localhost:8080';  // dirección completa de tu backend
 const URL_PENDIENTES = `${API_BASE}/api/ordenes/pedido/pendientes`;
 const URL_ESTADO     = `${API_BASE}/api/ordenes/pedido/estado`;
 
 const ESTADO = { PENDIENTE: 1, EN_PREPARACION: 2, ENTREGADO: 3 };
 
-/* Id del cocinero que inició sesión. Ajusta esto a tu login:
-   por ejemplo guárdalo en sessionStorage al iniciar sesión. */
+/* Empleado que inició sesión (viene de la sesión guardada por login.html) */
 function getEmpleado() {
-  try {
-    return {
-      id: Number(sessionStorage.getItem('idEmpleado')) || 1,
-      nombre: sessionStorage.getItem('nombreEmpleado') || 'Cocinero'
-    };
-  } catch { return { id: 1, nombre: 'Cocinero' }; }
+  const u = Auth.user() || {};
+  return {
+    id: Number(u.id_empleado ?? u.idEmpleado ?? u.id) || null,
+    nombre: [u.nombre, u.apellido].filter(Boolean).join(' ') || 'Cocinero'
+  };
 }
 const empleado = getEmpleado();
 
-/* Si usas token JWT, devuélvelo aquí. */
+/* Si tu backend entrega token, se envía automáticamente. */
 function headers() {
   const h = { 'Content-Type': 'application/json' };
-  try { const t = sessionStorage.getItem('token'); if (t) h.Authorization = `Bearer ${t}`; } catch {}
+  const t = Auth.token();
+  if (t) h.Authorization = `Bearer ${t}`;
   return h;
 }
 
@@ -97,6 +168,49 @@ const enProceso = new Set(); // ids con una petición en curso
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+/* ============ Sesión: datos del usuario y cierre de sesión ============ */
+function pintarUsuario() {
+  const u = Auth.user() || {};
+  const nombre = [u.nombre, u.apellido].filter(Boolean).join(' ') || 'Usuario';
+  const iniciales = (((u.nombre || '')[0] || '') + ((u.apellido || '')[0] || '')).toUpperCase() || '?';
+  const rol = u.rol || '';
+  $('uAvatar').textContent = iniciales;   $('uAvatar2').textContent = iniciales;
+  $('uNombre').textContent = nombre;      $('uNombre2').textContent = nombre;
+  $('uRol').textContent = rol;            $('uRol2').textContent = rol;
+  $('uRol2').hidden = !rol;
+  $('uCorreo').textContent = u.correo || '';
+}
+
+function menuUsuario(abrir) {
+  const d = $('userDropdown');
+  const abierto = abrir === undefined ? !d.classList.contains('is-open') : abrir;
+  d.classList.toggle('is-open', abierto);
+  $('btnUsuario').setAttribute('aria-expanded', abierto);
+}
+
+function pedirSalir() {
+  menuUsuario(false);
+  $('salir').classList.add('is-open');
+  $('sCancelar').focus();
+}
+function cancelarSalir() {
+  $('salir').classList.remove('is-open');
+  $('btnUsuario').focus();
+}
+
+$('btnUsuario').addEventListener('click', e => { e.stopPropagation(); menuUsuario(); });
+document.addEventListener('click', e => { if (!$('userDropdown').contains(e.target)) menuUsuario(false); });
+$('btnSalir').addEventListener('click', pedirSalir);
+$('sCancelar').addEventListener('click', cancelarSalir);
+$('sConfirmar').addEventListener('click', () => Auth.logout());
+$('salir').addEventListener('click', e => { if (e.target === $('salir')) cancelarSalir(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('salir').classList.contains('is-open')) cancelarSalir();
+  else menuUsuario(false);
+});
+
+/* ============ Pedidos ============ */
 /* Normaliza el pedido por si el backend usa nombres distintos. Ajusta aquí si hace falta. */
 function normalizar(o) {
   const items = o.detalles ?? o.items ?? o.productos ?? o.detallePedido ?? [];
@@ -206,6 +320,7 @@ async function cargarPedidos(silencioso = false) {
 
 async function cambiarEstado(id, idEstado) {
   if (enProceso.has(id)) return;
+  if (!empleado.id) { toast('No se pudo identificar al empleado. Cierra sesión e ingresa de nuevo.', 'danger'); return; }
   enProceso.add(id); render();
   try {
     const res = await fetch(URL_ESTADO, {
@@ -236,10 +351,11 @@ $('pedidos').addEventListener('click', e => {
 });
 $('btnActualizar').addEventListener('click', () => cargarPedidos());
 
-$('nombreEmpleado').textContent = empleado.nombre;
-$('avatar').textContent = empleado.nombre.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
-
-cargarPedidos(); // al entrar a la pantalla
+// Solo carga datos si hay sesión (si no, Auth.require() ya redirigió al login)
+if (Auth.isLoggedIn()) {
+  pintarUsuario();
+  cargarPedidos(); // al entrar a la pantalla
+}
 </script>
 </body>
 </html>
