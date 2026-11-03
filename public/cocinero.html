@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cocina · R-Manager</title>
+<title>Cocina · Maison Ledger</title>
 <link rel="stylesheet" href="theme.css">
 <script src="auth.js"></script>
 <script>Auth.require(['cocinero', 'admin']); // sin sesión vuelve a login.html; otros roles van a su pantalla</script>
@@ -62,7 +62,7 @@
 <body>
 
 <nav class="navbar">
-  <a class="navbar__brand" href="cocina.html"><span>&#9670;</span> R-Manager</a>
+  <a class="navbar__brand" href="cocina.html"><span>&#9670;</span> Maison Ledger</a>
   <ul class="navbar__links">
     <li><a class="is-active" href="cocina.html">Cocina</a></li>
   </ul>
@@ -152,11 +152,11 @@ function getEmpleado() {
 }
 const empleado = getEmpleado();
 
-/* Si tu backend entrega token, se envía automáticamente. */
+/* Envía el token (o, mientras no haya, las credenciales del usuario que inició sesión). */
 function headers() {
   const h = { 'Content-Type': 'application/json' };
-  const t = Auth.token();
-  if (t) h.Authorization = `Bearer ${t}`;
+  const a = Auth.authHeader();
+  if (a) h.Authorization = a;
   return h;
 }
 
@@ -301,20 +301,41 @@ function mostrarSkeleton() {
 }
 
 /* ============ API ============ */
+function mostrarError(msg) {
+  $('alerta').innerHTML = `<div class="alert alert--danger" role="alert">${esc(msg)}</div>`;
+}
+
 async function cargarPedidos(silencioso = false) {
   $('alerta').innerHTML = '';
   if (!silencioso) mostrarSkeleton();
   try {
     const res = await fetch(URL_PENDIENTES, { headers: headers() });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const data = await res.json();
+    const texto = await res.text();
+    // Para depurar: abre la consola (F12) y mira esta línea
+    console.log('[cocina] URL:', res.url, '| estado:', res.status, '| respuesta:', texto.slice(0, 500));
+
+    if (res.status === 401 || res.status === 403) {
+      pedidos = []; render();
+      mostrarError(Auth.authHeader()
+        ? `El servidor rechazó la petición (${res.status}). Es posible que tu usuario no tenga permiso para ver los pedidos.`
+        : 'Tu sesión no tiene credenciales para el servidor. Cierra sesión e ingresa de nuevo.');
+      return;
+    }
+    if (!res.ok) {
+      pedidos = []; render();
+      mostrarError(`El servidor respondió con error ${res.status}. Revisa la URL (URL_PENDIENTES) y los registros del backend.`);
+      return;
+    }
+    let data = [];
+    try { data = texto ? JSON.parse(texto) : []; } catch { throw new Error('La respuesta no es JSON'); }
     const lista = Array.isArray(data) ? data : (data.data ?? data.pedidos ?? []);
     pedidos = lista.map(normalizar);
     render();
   } catch (e) {
+    console.error('[cocina] error:', e);
     pedidos = [];
     render();
-    $('alerta').innerHTML = `<div class="alert alert--danger">No se pudieron cargar los pedidos. Revisa tu conexión e intenta de nuevo.</div>`;
+    mostrarError('No se pudo conectar con el servidor. Revisa que el backend esté encendido, la URL y el CORS (consola, F12).');
   }
 }
 
