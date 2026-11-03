@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de administración</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Admin page only */
+  .view { display: none; }
+  .view.is-active { display: block; }
+
+  .option-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .option {
+    display: flex; flex-direction: column; gap: .75rem;
+    padding: 1.75rem; text-decoration: none; color: inherit;
+    background: var(--white); border: 1px solid var(--gray-200);
+    border-top: 4px solid var(--gold); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .15s, transform .15s;
+  }
+  .option:hover { text-decoration: none; box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .option__icon {
+    width: 48px; height: 48px; display: grid; place-items: center;
+    background: var(--black); color: var(--gold); border-radius: var(--radius);
+  }
+  .option__icon svg { width: 24px; height: 24px; }
+  .option h2 { margin: 0; }
+  .option p { margin: 0; color: var(--gray-500); }
+
+  .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .toolbar .input { max-width: 320px; }
+  .toolbar .btn { margin-left: auto; }
+
+  .empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
+  .empty strong { display: block; margin-bottom: .25rem; color: var(--gray-900); }
+
+  .breadcrumb { margin-bottom: .75rem; font-size: .9rem; }
+
+  .table tbody tr.is-clickable { cursor: pointer; }
+  .detail-list { display: grid; grid-template-columns: 140px 1fr; gap: .75rem 1rem; margin: 0; }
+  .detail-list dt { color: var(--gray-500); font-weight: 500; }
+  .detail-list dd { margin: 0; font-weight: 500; word-break: break-word; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="#panel"><span>&#9670;</span> Maison Ledger</a>
+  <div class="navbar__actions">
+    <span class="badge badge--dark">Administrador</span>
+    <span class="avatar" title="Admin">AD</span>
+    <button class="btn btn--outline btn--sm" style="color:var(--white);border-color:var(--gray-700)">Cerrar sesión</button>
+  </div>
+</nav>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__title">Administración</div>
+      <a href="#panel" data-nav="panel" class="is-active">Panel</a>
+      <a href="#empleados" data-nav="empleados">Empleados</a>
+      <a href="admin-ordenes.html">Órdenes</a>
+      <a href="admin-menu.html">Menú</a>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <section class="view is-active" id="view-panel">
+      <div class="page-header">
+        <div>
+          <h1>Panel de administración</h1>
+          <div class="text-muted">Selecciona una sección para gestionar.</div>
+        </div>
+      </div>
+
+      <div class="option-grid">
+        <a class="option" href="#empleados">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/><path d="M17 4a4 4 0 0 1 0 8M22 21v-1a6 6 0 0 0-4-5.6"/></svg>
+          </div>
+          <h2>Empleados</h2>
+          <p>Consulta y administra al personal del restaurante.</p>
+        </a>
+        <a class="option" href="admin-ordenes.html">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M8 12h8M8 16h5"/></svg>
+          </div>
+          <h2>Órdenes</h2>
+          <p>Revisa y da seguimiento a las órdenes del servicio.</p>
+        </a>
+        <a class="option" href="admin-menu.html">
+          <div class="option__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2v9M10 3v7a2 2 0 0 1-2 2M18 21V3c-2.5 1-4 4-4 8 0 2 1 3 4 3"/></svg>
+          </div>
+          <h2>Menú</h2>
+          <p>Gestiona los platos, categorías y precios.</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- Section template: Empleados -->
+    <section class="view" id="view-empleados">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Empleados</div>
+      <div class="page-header"><h1>Empleados</h1></div>
+      <div class="toolbar">
+        <input class="input" id="emp-search" type="search" placeholder="Buscar empleado" aria-label="Buscar empleado">
+        <button class="btn btn--primary" id="emp-add">Agregar empleado</button>
+      </div>
+      <div class="card">
+        <div class="empty" id="emp-state">Cargando empleados…</div>
+        <div class="table-wrap" id="emp-table" hidden>
+          <table class="table">
+            <thead><tr><th>Nombre</th><th>Rol</th></tr></thead>
+            <tbody id="emp-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section template: Órdenes -->
+    <section class="view" id="view-ordenes">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Órdenes</div>
+      <div class="page-header"><h1>Órdenes</h1></div>
+      <div class="toolbar">
+        <input class="input" type="search" placeholder="Buscar orden" aria-label="Buscar orden">
+      </div>
+      <div class="card"><div class="empty"><strong>Lista de órdenes</strong>El contenido se agregará aquí.</div></div>
+    </section>
+
+    <!-- Section template: Menú -->
+    <section class="view" id="view-menu">
+      <div class="breadcrumb"><a href="#panel">Panel</a> / Menú</div>
+      <div class="page-header"><h1>Menú</h1></div>
+      <div class="toolbar">
+        <input class="input" type="search" placeholder="Buscar plato" aria-label="Buscar plato">
+        <button class="btn btn--primary">Agregar plato</button>
+      </div>
+      <div class="card"><div class="empty"><strong>Lista del menú</strong>El contenido se agregará aquí.</div></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal: detalle de empleado -->
+<div class="modal-backdrop" id="modal-empleado">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="emp-modal-title">
+    <div class="modal__header">
+      <h2 class="modal__title" id="emp-modal-title">Detalle del empleado</h2>
+      <button class="modal__close" id="emp-modal-close" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <dl class="detail-list">
+        <dt>ID</dt><dd id="d-id"></dd>
+        <dt>Nombre</dt><dd id="d-nombre"></dd>
+        <dt>Apellido</dt><dd id="d-apellido"></dd>
+        <dt>Cédula</dt><dd id="d-cedula"></dd>
+        <dt>Correo</dt><dd id="d-correo"></dd>
+        <dt>Rol</dt><dd id="d-rol"></dd>
+      </dl>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--danger" id="emp-delete" style="margin-right:auto">Eliminar</button>
+      <button class="btn btn--outline" id="emp-edit-rol">Cambiar rol</button>
+      <button class="btn btn--outline" id="emp-edit-pass">Cambiar contraseña</button>
+      <button class="btn btn--dark" id="emp-modal-ok">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: crear empleado -->
+<div class="modal-backdrop" id="modal-crear">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="crear-title">
+    <form id="form-crear" novalidate>
+      <div class="modal__header">
+        <h2 class="modal__title" id="crear-title">Nuevo empleado</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="crear-error" hidden></div>
+        <div class="form-row">
+          <div class="field"><label class="label" for="f-nombre">Nombre</label><input class="input" id="f-nombre" required></div>
+          <div class="field"><label class="label" for="f-apellido">Apellido</label><input class="input" id="f-apellido" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="label" for="f-cedula">Cédula</label><input class="input" id="f-cedula" inputmode="numeric" required></div>
+          <div class="field"><label class="label" for="f-rol">Rol</label><select class="select" id="f-rol" required></select></div>
+        </div>
+        <div class="field"><label class="label" for="f-correo">Correo</label><input class="input" id="f-correo" type="email" required></div>
+        <div class="field"><label class="label" for="f-contrasenna">Contraseña</label><input class="input" id="f-contrasenna" type="password" autocomplete="new-password" required></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="crear-submit">Crear empleado</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: confirmar eliminación -->
+<div class="modal-backdrop" id="modal-confirm">
+  <div class="modal modal--sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal__header"><h2 class="modal__title" id="confirm-title">¿Eliminar empleado?</h2></div>
+    <div class="modal__body">
+      <p id="confirm-text" style="margin:0"></p>
+      <div class="alert alert--danger mt-2" id="confirm-error" hidden></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" data-close>Cancelar</button>
+      <button class="btn btn--danger" id="confirm-yes">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: cambiar rol -->
+<div class="modal-backdrop" id="modal-rol">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="rol-title">
+    <form id="form-rol">
+      <div class="modal__header">
+        <h2 class="modal__title" id="rol-title">Cambiar rol</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="rol-error" hidden></div>
+        <p id="rol-text" class="text-muted"></p>
+        <div class="field" style="margin-bottom:0"><label class="label" for="r-rol">Nuevo rol</label><select class="select" id="r-rol"></select></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="rol-submit">Guardar rol</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: cambiar contraseña -->
+<div class="modal-backdrop" id="modal-pass">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="pass-title">
+    <form id="form-pass">
+      <div class="modal__header">
+        <h2 class="modal__title" id="pass-title">Cambiar contraseña</h2>
+        <button type="button" class="modal__close" data-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <div class="alert alert--danger" id="pass-error" hidden></div>
+        <p id="pass-text" class="text-muted"></p>
+        <div class="field"><label class="label" for="p-nueva">Nueva contraseña</label><input class="input" id="p-nueva" type="password" autocomplete="new-password"></div>
+        <div class="field" style="margin-bottom:0"><label class="label" for="p-confirmar">Confirmar contraseña</label><input class="input" id="p-confirmar" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn btn--primary" id="pass-submit">Guardar contraseña</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+  // ---------- Configuración (solo para pruebas: quitar credenciales hardcodeadas) ----------
+  const API = 'http://localhost:8080/api';
+  const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+
+  // ---------- Empleados ----------
+  let empleados = [];
+
+  const $state = document.getElementById('emp-state');
+  const $table = document.getElementById('emp-table');
+  const $body = document.getElementById('emp-body');
+  const $search = document.getElementById('emp-search');
+  const $modal = document.getElementById('modal-empleado');
+
+  function setState(msg, isError) {
+    $state.textContent = msg;
+    $state.style.color = isError ? 'var(--danger)' : '';
+    $state.hidden = false;
+    $table.hidden = true;
+    if (isError) {
+      const retry = document.createElement('button');
+      retry.className = 'btn btn--outline btn--sm';
+      retry.style.marginTop = '1rem';
+      retry.textContent = 'Reintentar';
+      retry.addEventListener('click', cargarEmpleados);
+      $state.appendChild(document.createElement('br'));
+      $state.appendChild(retry);
+    }
+  }
+
+  async function cargarEmpleados() {
+    setState('Cargando empleados…');
+    try {
+      const res = await fetch(API + '/empleado', AUTH);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      empleados = await res.json();
+      renderEmpleados();
+    } catch (err) {
+      console.error(err);
+      setState('No se pudo cargar la lista de empleados.', true);
+    }
+  }
+
+  function renderEmpleados() {
+    const q = $search.value.trim().toLowerCase();
+    const lista = empleados.filter(e =>
+      (e.nombre + ' ' + e.apellido + ' ' + (e.rol ? e.rol.nombre : '')).toLowerCase().includes(q)
+    );
+
+    if (lista.length === 0) {
+      setState(empleados.length === 0 ? 'No hay empleados registrados.' : 'Sin resultados para la búsqueda.');
+      return;
+    }
+
+    $body.replaceChildren();
+    lista.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.className = 'is-clickable';
+      tr.tabIndex = 0;
+
+      const tdNombre = document.createElement('td');
+      tdNombre.textContent = e.nombre + ' ' + e.apellido;
+
+      const tdRol = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--gold';
+      badge.textContent = e.rol ? e.rol.nombre : '—';
+      tdRol.appendChild(badge);
+
+      tr.append(tdNombre, tdRol);
+      tr.addEventListener('click', () => abrirDetalle(e));
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter') abrirDetalle(e); });
+      $body.appendChild(tr);
+    });
+
+    $state.hidden = true;
+    $table.hidden = false;
+  }
+
+  // Detalle (nunca se muestra la contraseña)
+  let seleccionado = null;
+
+  function abrirDetalle(e) {
+    seleccionado = e;
+    document.getElementById('d-id').textContent = e.id_empleado;
+    document.getElementById('d-nombre').textContent = e.nombre;
+    document.getElementById('d-apellido').textContent = e.apellido;
+    document.getElementById('d-cedula').textContent = e.cedula;
+    document.getElementById('d-correo').textContent = e.correo;
+    document.getElementById('d-rol').textContent = e.rol ? e.rol.nombre : '—';
+    $modal.classList.add('is-open');
+  }
+  function cerrarDetalle() { $modal.classList.remove('is-open'); }
+
+  document.getElementById('emp-modal-close').addEventListener('click', cerrarDetalle);
+  document.getElementById('emp-modal-ok').addEventListener('click', cerrarDetalle);
+  $search.addEventListener('input', () => { if (empleados.length) renderEmpleados(); });
+
+  // ---------- Modales: cerrar con X/Cancelar, clic fuera o Escape ----------
+  const $crear = document.getElementById('modal-crear');
+  const $confirm = document.getElementById('modal-confirm');
+
+  document.querySelectorAll('.modal-backdrop').forEach(b => {
+    b.addEventListener('click', e => { if (e.target === b) b.classList.remove('is-open'); });
+    b.querySelectorAll('[data-close]').forEach(btn =>
+      btn.addEventListener('click', () => b.classList.remove('is-open')));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    // Cierra solo el modal que está encima (el último abierto en el DOM)
+    const abiertos = document.querySelectorAll('.modal-backdrop.is-open');
+    if (abiertos.length) abiertos[abiertos.length - 1].classList.remove('is-open');
+  });
+
+  // ---------- Avisos ----------
+  function toast(msg, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+    t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
+  async function mensajeDeError(res) {
+    let detalle = '';
+    try { detalle = (await res.text()).slice(0, 200); } catch (_) {}
+    return 'Error ' + res.status + (detalle ? ': ' + detalle : '');
+  }
+
+  // ---------- Crear empleado ----------
+  // Completa esta lista con los roles de tu backend (id_rol y nombre).
+  // También se agregan automáticamente los roles que ya aparezcan en la lista de empleados.
+  const ROLES_BASE = [
+    { id_rol: 1, nombre: 'mesero' },
+    { id_rol: 2, nombre: 'cocinero' },
+    { id_rol: 3, nombre: 'admin' }
+  ];
+
+  function rolesDisponibles() {
+    const mapa = new Map(ROLES_BASE.map(r => [r.id_rol, r]));
+    empleados.forEach(e => { if (e.rol) mapa.set(e.rol.id_rol, e.rol); });
+    return [...mapa.values()].sort((a, b) => a.id_rol - b.id_rol);
+  }
+
+  const $form = document.getElementById('form-crear');
+  const $crearError = document.getElementById('crear-error');
+  const $crearSubmit = document.getElementById('crear-submit');
+
+  document.getElementById('emp-add').addEventListener('click', () => {
+    $form.reset();
+    $crearError.hidden = true;
+    const $rol = document.getElementById('f-rol');
+    $rol.replaceChildren();
+    rolesDisponibles().forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.id_rol;
+      o.textContent = r.nombre;
+      $rol.appendChild(o);
+    });
+    $crear.classList.add('is-open');
+    document.getElementById('f-nombre').focus();
+  });
+
+  $form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    $crearError.hidden = true;
+
+    const val = id => document.getElementById(id).value.trim();
+    const $rol = document.getElementById('f-rol');
+    const campos = ['f-nombre', 'f-apellido', 'f-cedula', 'f-correo', 'f-contrasenna'];
+
+    if (campos.some(id => !val(id)) || !$rol.value) {
+      $crearError.textContent = 'Completa todos los campos.';
+      $crearError.hidden = false;
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(val('f-correo'))) {
+      $crearError.textContent = 'El correo no es válido.';
+      $crearError.hidden = false;
+      return;
+    }
+
+    const body = {
+      nombre: val('f-nombre'),
+      apellido: val('f-apellido'),
+      cedula: val('f-cedula'),
+      contrasenna: document.getElementById('f-contrasenna').value,
+      correo: val('f-correo'),
+      rol: {
+        id_rol: Number($rol.value),
+        nombre: $rol.options[$rol.selectedIndex].textContent
+      }
+    };
+
+    $crearSubmit.disabled = true;
+    try {
+      const res = await fetch(API + '/empleado/crearempleado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $crear.classList.remove('is-open');
+      toast('Empleado creado correctamente.', 'success');
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $crearError.textContent = 'No se pudo crear el empleado. ' + err.message;
+      $crearError.hidden = false;
+    } finally {
+      $crearSubmit.disabled = false;
+    }
+  });
+
+  // ---------- Eliminar empleado ----------
+  const $confirmError = document.getElementById('confirm-error');
+  const $confirmYes = document.getElementById('confirm-yes');
+
+  document.getElementById('emp-delete').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $confirmError.hidden = true;
+    document.getElementById('confirm-text').textContent =
+      'Se eliminará a ' + seleccionado.nombre + ' ' + seleccionado.apellido + '. Esta acción no se puede deshacer.';
+    $confirm.classList.add('is-open');
+  });
+
+  $confirmYes.addEventListener('click', async () => {
+    if (!seleccionado) return;
+    $confirmYes.disabled = true;
+    $confirmError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleados/' + seleccionado.id_empleado, { method: 'DELETE', ...AUTH });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $confirm.classList.remove('is-open');
+      cerrarDetalle();
+      toast('Empleado eliminado.', 'success');
+      seleccionado = null;
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $confirmError.textContent = 'No se pudo eliminar. ' + err.message;
+      $confirmError.hidden = false;
+    } finally {
+      $confirmYes.disabled = false;
+    }
+  });
+
+  // ---------- Cambiar rol ----------
+  // PUT /api/empleado/empleados/rol/{id}  con el id del rol como cuerpo (1 mesero, 2 cocinero, 3 admin)
+  const $modalRol = document.getElementById('modal-rol');
+  const $rolSelect = document.getElementById('r-rol');
+  const $rolError = document.getElementById('rol-error');
+  const $rolSubmit = document.getElementById('rol-submit');
+
+  document.getElementById('emp-edit-rol').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $rolError.hidden = true;
+    document.getElementById('rol-text').textContent = seleccionado.nombre + ' ' + seleccionado.apellido;
+    $rolSelect.replaceChildren();
+    rolesDisponibles().forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.id_rol;
+      o.textContent = r.nombre;
+      if (seleccionado.rol && seleccionado.rol.id_rol === r.id_rol) o.selected = true;
+      $rolSelect.appendChild(o);
+    });
+    $modalRol.classList.add('is-open');
+    $rolSelect.focus();
+  });
+
+  document.getElementById('form-rol').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (!seleccionado) return;
+    const idRol = Number($rolSelect.value);
+    const nombreRol = $rolSelect.options[$rolSelect.selectedIndex].textContent;
+
+    $rolSubmit.disabled = true;
+    $rolError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleado/empleados/rol/' + seleccionado.id_empleado, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify(idRol)
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      seleccionado.rol = { id_rol: idRol, nombre: nombreRol };
+      document.getElementById('d-rol').textContent = nombreRol;
+      $modalRol.classList.remove('is-open');
+      toast('Rol actualizado.', 'success');
+      cargarEmpleados();
+    } catch (err) {
+      console.error(err);
+      $rolError.textContent = 'No se pudo cambiar el rol. ' + err.message;
+      $rolError.hidden = false;
+    } finally {
+      $rolSubmit.disabled = false;
+    }
+  });
+
+  // ---------- Cambiar contraseña ----------
+  // PUT /api/empleado/empleados/contrasenna  con { id, contrasenna }
+  const $modalPass = document.getElementById('modal-pass');
+  const $passForm = document.getElementById('form-pass');
+  const $passError = document.getElementById('pass-error');
+  const $passSubmit = document.getElementById('pass-submit');
+
+  document.getElementById('emp-edit-pass').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $passForm.reset();
+    $passError.hidden = true;
+    document.getElementById('pass-text').textContent = seleccionado.nombre + ' ' + seleccionado.apellido;
+    $modalPass.classList.add('is-open');
+    document.getElementById('p-nueva').focus();
+  });
+
+  $passForm.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (!seleccionado) return;
+    const nueva = document.getElementById('p-nueva').value;
+    const confirmar = document.getElementById('p-confirmar').value;
+
+    if (!nueva) {
+      $passError.textContent = 'Escribe la nueva contraseña.';
+      $passError.hidden = false;
+      return;
+    }
+    if (nueva !== confirmar) {
+      $passError.textContent = 'Las contraseñas no coinciden.';
+      $passError.hidden = false;
+      return;
+    }
+
+    $passSubmit.disabled = true;
+    $passError.hidden = true;
+    try {
+      const res = await fetch(API + '/empleado/empleados/contrasenna', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...AUTH.headers },
+        body: JSON.stringify({ id: String(seleccionado.id_empleado), contrasenna: nueva })
+      });
+      if (!res.ok) throw new Error(await mensajeDeError(res));
+      $modalPass.classList.remove('is-open');
+      toast('Contraseña actualizada.', 'success');
+    } catch (err) {
+      console.error(err);
+      $passError.textContent = 'No se pudo cambiar la contraseña. ' + err.message;
+      $passError.hidden = false;
+    } finally {
+      $passSubmit.disabled = false;
+    }
+  });
+
+  // ---------- Router por hash: #panel | #empleados | #ordenes | #menu ----------
+  function show() {
+    const id = (location.hash || '#panel').slice(1);
+    const target = document.getElementById('view-' + id) ? id : 'panel';
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + target));
+    document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('is-active', a.dataset.nav === target));
+    if (target === 'empleados') cargarEmpleados();
+  }
+  window.addEventListener('hashchange', show);
+  show();
+</script>
+</body>
+</html>

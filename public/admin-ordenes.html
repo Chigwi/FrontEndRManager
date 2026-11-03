@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Órdenes · Administración</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .toolbar .select { max-width: 240px; }
+  .toolbar .count { margin-left: auto; }
+  .empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
+  .table tbody tr.is-clickable { cursor: pointer; }
+  .detail-list { display: grid; grid-template-columns: 130px 1fr; gap: .75rem 1rem; margin: 0; }
+  .detail-list dt { color: var(--gray-500); font-weight: 500; }
+  .detail-list dd { margin: 0; font-weight: 500; word-break: break-word; }
+  .breadcrumb { margin-bottom: .75rem; font-size: .9rem; }
+  .tabs { overflow-x: auto; white-space: nowrap; }
+  .tab { flex: none; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="admin.html#panel"><span>&#9670;</span> Maison Ledger</a>
+  <div class="navbar__actions">
+    <span class="badge badge--dark">Administrador</span>
+    <span class="avatar" title="Admin">AD</span>
+  </div>
+</nav>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__title">Administración</div>
+      <a href="admin.html#panel">Panel</a>
+      <a href="admin.html#empleados">Empleados</a>
+      <a class="is-active" href="admin-ordenes.html">Órdenes</a>
+      <a href="admin-menu.html">Menú</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="breadcrumb"><a href="admin.html#panel">Panel</a> / Órdenes</div>
+    <div class="page-header"><h1>Órdenes</h1></div>
+
+    <div class="tabs" id="tabs" role="tablist" aria-label="Vistas de órdenes"></div>
+
+    <div class="toolbar">
+      <select class="select" id="sel-estado" aria-label="Estado" hidden></select>
+      <select class="select" id="sel-empleado" aria-label="Empleado" hidden></select>
+      <button class="btn btn--outline btn--sm" id="btn-actualizar">Actualizar</button>
+      <span class="text-muted count" id="conteo" aria-live="polite"></span>
+    </div>
+
+    <div class="card">
+      <div class="empty" id="estado">Cargando…</div>
+      <div class="table-wrap" id="t-pedidos" hidden>
+        <table class="table">
+          <thead><tr><th>Pedido</th><th>Mesa</th><th>Mesero</th><th>Estado</th><th>Total</th><th>Pago</th><th>Actualizado</th></tr></thead>
+          <tbody id="b-pedidos"></tbody>
+        </table>
+      </div>
+      <div class="table-wrap" id="t-mesas" hidden>
+        <table class="table">
+          <thead><tr><th>Empleado</th><th>Mesa</th><th>Estado</th></tr></thead>
+          <tbody id="b-mesas"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Detalle de pedido -->
+<div class="modal-backdrop" id="m-detalle">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-titulo">
+    <div class="modal__header">
+      <h2 class="modal__title" id="d-titulo"></h2>
+      <button class="modal__close" data-close aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <dl class="detail-list">
+        <dt>Mesa</dt><dd id="d-mesa"></dd>
+        <dt>Mesero</dt><dd id="d-mesero"></dd>
+        <dt>Estado</dt><dd id="d-estado"></dd>
+        <dt>Total</dt><dd id="d-total"></dd>
+        <dt>Método de pago</dt><dd id="d-pago"></dd>
+        <dt>Creado</dt><dd id="d-creado"></dd>
+        <dt>Actualizado</dt><dd id="d-actualizado"></dd>
+      </dl>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--danger" id="btn-eliminar" style="margin-right:auto">Eliminar</button>
+      <button class="btn btn--dark" data-close>Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmar eliminación -->
+<div class="modal-backdrop" id="m-confirm">
+  <div class="modal modal--sm" role="alertdialog" aria-modal="true" aria-labelledby="c-titulo">
+    <div class="modal__header"><h2 class="modal__title" id="c-titulo">¿Eliminar orden?</h2></div>
+    <div class="modal__body">
+      <p id="c-texto" style="margin:0"></p>
+      <div class="alert alert--danger mt-2" id="c-error" hidden></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" data-close>Cancelar</button>
+      <button class="btn btn--danger" id="c-si">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+  // ---------- Configuración (solo para pruebas) ----------
+  const API = 'http://localhost:8080/api';
+  const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+
+  const URL_ORDENES   = API + '/ordenes';                         // GET todas
+  const urlEliminar   = id => API + '/ordenes/' + id;             // DELETE
+  const URL_ACTIVAS   = API + '/ordenes/mesasActivas';            // GET
+  const urlMesasEmp   = id => API + '/ordenes/mesasEmpleado/' + id; // GET
+  const URL_PENDIENTES = API + '/ordenes/pedido/pendientes';      // GET
+  const urlPorEstado  = estado => API + '/ordenes/pedido/estados/' + encodeURIComponent(estado); // GET
+
+  const ESTADOS_BASE = ['Pendiente'];   // se completan con los estados que aparezcan en las órdenes
+
+  const $ = id => document.getElementById(id);
+
+  const VISTAS = {
+    todas:      { nombre: 'Todas',              tipo: 'pedidos', url: () => URL_ORDENES },
+    pendientes: { nombre: 'Pendientes',         tipo: 'pedidos', url: () => URL_PENDIENTES },
+    estado:     { nombre: 'Por estado',         tipo: 'pedidos', url: () => urlPorEstado($('sel-estado').value), requiere: 'sel-estado', aviso: 'Selecciona un estado.' },
+    activas:    { nombre: 'Mesas activas',      tipo: 'mesas',   url: () => URL_ACTIVAS },
+    empleado:   { nombre: 'Mesas por empleado', tipo: 'mesas',   url: () => urlMesasEmp($('sel-empleado').value), requiere: 'sel-empleado', aviso: 'Selecciona un empleado.' }
+  };
+  let vista = 'todas';
+  let pedidos = [];        // última lista completa (sirve para llenar los filtros)
+  let seleccionado = null;
+  let peticion = 0;
+
+  // ---------- Utilidades ----------
+  function toast(msg, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+  async function errorHttp(res) {
+    let d = '';
+    try { d = (await res.text()).slice(0, 200); } catch (_) {}
+    return 'Error ' + res.status + (d ? ': ' + d : '');
+  }
+  const moneda = n => n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  const fecha = s => s ? new Date(s).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const nombreMesero = m => m ? (m.nombre + ' ' + m.apellido) : '—';
+  const textoMesa = m => m ? ('Mesa ' + m.id + ' (cupo ' + m.cupo + ')') : '—';
+
+  function badgeEstado(nombre) {
+    const n = (nombre || '').toLowerCase();
+    let clase = 'badge--gold';
+    if (n.includes('pend')) clase = 'badge--warning';
+    else if (/(list|entreg|pag|final|complet)/.test(n)) clase = 'badge--success';
+    else if (/(cancel|rechaz)/.test(n)) clase = 'badge--danger';
+    const s = document.createElement('span');
+    s.className = 'badge ' + clase;
+    s.textContent = nombre || '—';
+    return s;
+  }
+  function celda(contenido) {
+    const td = document.createElement('td');
+    if (contenido instanceof Node) td.appendChild(contenido); else td.textContent = contenido;
+    return td;
+  }
+
+  // ---------- Modales ----------
+  document.querySelectorAll('.modal-backdrop').forEach(b => {
+    b.addEventListener('click', e => { if (e.target === b) b.classList.remove('is-open'); });
+    b.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', () => b.classList.remove('is-open')));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const abiertos = document.querySelectorAll('.modal-backdrop.is-open');
+    if (abiertos.length) abiertos[abiertos.length - 1].classList.remove('is-open');
+  });
+
+  // ---------- Pestañas y filtros ----------
+  function pintarTabs() {
+    $('tabs').replaceChildren();
+    Object.entries(VISTAS).forEach(([id, v]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tab' + (id === vista ? ' is-active' : '');
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', id === vista);
+      b.textContent = v.nombre;
+      b.addEventListener('click', () => { vista = id; pintarTabs(); cargarVista(); });
+      $('tabs').appendChild(b);
+    });
+    $('sel-estado').hidden = vista !== 'estado';
+    $('sel-empleado').hidden = vista !== 'empleado';
+  }
+
+  function llenarFiltros() {
+    const estados = new Set(ESTADOS_BASE);
+    const empleados = new Map();
+    pedidos.forEach(p => {
+      if (p.estado) estados.add(p.estado.nombre);
+      if (p.mesero) empleados.set(p.mesero.id_empleado, nombreMesero(p.mesero));
+    });
+    const lleno = (sel, items, vacio) => {
+      const actual = sel.value;
+      sel.replaceChildren();
+      const o0 = document.createElement('option'); o0.value = ''; o0.textContent = vacio; sel.appendChild(o0);
+      items.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); });
+      sel.value = actual;
+    };
+    lleno($('sel-estado'), [...estados].map(e => [e, e]), 'Selecciona un estado');
+    lleno($('sel-empleado'), [...empleados].map(([id, n]) => [id, n]), 'Selecciona un empleado');
+  }
+
+  $('sel-estado').addEventListener('change', cargarVista);
+  $('sel-empleado').addEventListener('change', cargarVista);
+  $('btn-actualizar').addEventListener('click', cargarVista);
+
+  // ---------- Carga ----------
+  function setEstado(msg, esError) {
+    $('estado').textContent = msg;
+    $('estado').style.color = esError ? 'var(--danger)' : '';
+    $('estado').hidden = false;
+    $('t-pedidos').hidden = true;
+    $('t-mesas').hidden = true;
+    $('conteo').textContent = '';
+    if (esError) {
+      const b = document.createElement('button');
+      b.className = 'btn btn--outline btn--sm';
+      b.style.marginTop = '1rem';
+      b.textContent = 'Reintentar';
+      b.addEventListener('click', cargarVista);
+      $('estado').append(document.createElement('br'), b);
+    }
+  }
+
+  async function cargarVista() {
+    const v = VISTAS[vista];
+    if (v.requiere && !$(v.requiere).value) { setEstado(v.aviso); return; }
+    const mia = ++peticion;
+    setEstado('Cargando…');
+    try {
+      const res = await fetch(v.url(), AUTH);
+      if (!res.ok) throw new Error(await errorHttp(res));
+      const datos = await res.json();
+      if (mia !== peticion) return;               // llegó una respuesta vieja
+      if (vista === 'todas') { pedidos = datos; llenarFiltros(); }
+      v.tipo === 'pedidos' ? pintarPedidos(datos) : pintarMesas(datos);
+    } catch (err) {
+      console.error(err);
+      if (mia === peticion) setEstado('No se pudo cargar esta vista. ' + err.message, true);
+    }
+  }
+
+  function pintarPedidos(lista) {
+    if (!lista.length) { setEstado('No hay órdenes en esta vista.'); return; }
+    $('b-pedidos').replaceChildren();
+    lista.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.className = 'is-clickable';
+      tr.tabIndex = 0;
+      tr.append(
+        celda('#' + p.id_pedido), celda(textoMesa(p.mesa)), celda(nombreMesero(p.mesero)),
+        celda(badgeEstado(p.estado && p.estado.nombre)), celda(moneda(p.precio_total)),
+        celda(p.metodo_de_pago || '—'), celda(fecha(p.fecha_ultima_actualizacion))
+      );
+      tr.addEventListener('click', () => abrirDetalle(p));
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter') abrirDetalle(p); });
+      $('b-pedidos').appendChild(tr);
+    });
+    $('estado').hidden = true;
+    $('t-mesas').hidden = true;
+    $('t-pedidos').hidden = false;
+    $('conteo').textContent = lista.length + (lista.length === 1 ? ' orden' : ' órdenes');
+  }
+
+  function pintarMesas(lista) {
+    if (!lista.length) { setEstado('No hay mesas para mostrar.'); return; }
+    $('b-mesas').replaceChildren();
+    lista.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.append(celda(m.nombreEmpleado), celda('Mesa ' + m.mesaId), celda(badgeEstado(m.estado)));
+      $('b-mesas').appendChild(tr);
+    });
+    $('estado').hidden = true;
+    $('t-pedidos').hidden = true;
+    $('t-mesas').hidden = false;
+    $('conteo').textContent = lista.length + (lista.length === 1 ? ' mesa' : ' mesas');
+  }
+
+  // ---------- Detalle (nunca se muestra la contraseña del mesero) ----------
+  function abrirDetalle(p) {
+    seleccionado = p;
+    $('d-titulo').textContent = 'Orden #' + p.id_pedido;
+    $('d-mesa').textContent = textoMesa(p.mesa);
+    $('d-mesero').textContent = nombreMesero(p.mesero);
+    $('d-estado').replaceChildren(badgeEstado(p.estado && p.estado.nombre));
+    $('d-total').textContent = moneda(p.precio_total);
+    $('d-pago').textContent = p.metodo_de_pago || '—';
+    $('d-creado').textContent = fecha(p.fecha_creacion);
+    $('d-actualizado').textContent = fecha(p.fecha_ultima_actualizacion);
+    $('m-detalle').classList.add('is-open');
+  }
+
+  // ---------- Eliminar ----------
+  $('btn-eliminar').addEventListener('click', () => {
+    if (!seleccionado) return;
+    $('c-error').hidden = true;
+    $('c-texto').textContent = 'Se eliminará la orden #' + seleccionado.id_pedido + '. Esta acción no se puede deshacer.';
+    $('m-confirm').classList.add('is-open');
+  });
+
+  $('c-si').addEventListener('click', async () => {
+    if (!seleccionado) return;
+    $('c-si').disabled = true;
+    $('c-error').hidden = true;
+    try {
+      const res = await fetch(urlEliminar(seleccionado.id_pedido), { method: 'DELETE', ...AUTH });
+      if (!res.ok) throw new Error(await errorHttp(res));
+      $('m-confirm').classList.remove('is-open');
+      $('m-detalle').classList.remove('is-open');
+      seleccionado = null;
+      toast('Orden eliminada.', 'success');
+      cargarVista();
+    } catch (err) {
+      console.error(err);
+      $('c-error').textContent = 'No se pudo eliminar. ' + err.message;
+      $('c-error').hidden = false;
+    } finally {
+      $('c-si').disabled = false;
+    }
+  });
+
+  pintarTabs();
+  cargarVista();
+</script>
+</body>
+</html>
