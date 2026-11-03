@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cocina · Maison Ledger</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Solo lo específico de esta pantalla; todo lo demás viene de theme.css */
+  .orders { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  .order { display: flex; flex-direction: column; }
+  .order--cooking { border-top: 3px solid var(--warning); }
+  .order--pending { border-top: 3px solid var(--gold); }
+  .order__meta { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+  .order__title { margin: 0; font-size: 1.25rem; }
+  .order__sub { color: var(--gray-500); font-size: .85rem; }
+  .order__items { list-style: none; margin: 0; padding: 0; }
+  .order__items li { display: flex; gap: .75rem; padding: .5rem 0; border-bottom: 1px dashed var(--gray-200); }
+  .order__items li:last-child { border-bottom: 0; }
+  .order__qty { min-width: 2.2rem; font-weight: 700; color: var(--gold-dark); }
+  .order__note { margin-top: .75rem; padding: .55rem .75rem; background: var(--gold-tint); border-radius: var(--radius); font-size: .88rem; }
+  .order__actions { display: flex; gap: .6rem; }
+  .order__actions .btn { flex: 1; }
+  .empty { text-align: center; padding: 3rem 1rem; }
+  .empty h3 { margin-bottom: .25rem; }
+  .skeleton { height: 200px; background: linear-gradient(90deg, var(--gray-100), var(--gray-50), var(--gray-100)); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
+  @keyframes sk { to { background-position: -200% 0; } }
+  .navbar__user { color: var(--gray-300); font-size: .9rem; }
+  @media (max-width: 560px) { .navbar__user { display: none; } }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="#"><span>&#9670;</span> Maison Ledger</a>
+  <ul class="navbar__links">
+    <li><a class="is-active" href="#">Cocina</a></li>
+  </ul>
+  <div class="navbar__actions">
+    <span class="navbar__user" id="nombreEmpleado">Cocinero</span>
+    <span class="avatar" id="avatar">CO</span>
+  </div>
+</nav>
+
+<main class="main" style="max-width:1200px;margin:0 auto;">
+  <div class="page-header">
+    <div>
+      <h1>Pedidos en cocina</h1>
+      <div class="text-muted" id="resumen">Cargando pedidos…</div>
+    </div>
+    <button class="btn btn--outline" id="btnActualizar">Actualizar lista</button>
+  </div>
+
+  <div class="grid grid--stats">
+    <div class="card stat stat--dark"><div class="stat__label">Pendientes</div><div class="stat__value" id="statPendientes">–</div><div class="stat__delta">Por empezar</div></div>
+    <div class="card stat"><div class="stat__label">En preparación</div><div class="stat__value" id="statPreparacion">–</div><div class="stat__delta">En marcha ahora</div></div>
+  </div>
+
+  <div id="alerta"></div>
+  <div class="orders" id="pedidos"></div>
+</main>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+/* ============ Configuración ============ */
+const API_BASE = '';  // Ej: 'https://mi-servidor.com'. Vacío = mismo dominio.
+const URL_PENDIENTES = `${API_BASE}/api/ordenes/pedido/pendientes`;
+const URL_ESTADO     = `${API_BASE}/api/ordenes/pedido/estado`;
+
+const ESTADO = { PENDIENTE: 1, EN_PREPARACION: 2, ENTREGADO: 3 };
+
+/* Id del cocinero que inició sesión. Ajusta esto a tu login:
+   por ejemplo guárdalo en sessionStorage al iniciar sesión. */
+function getEmpleado() {
+  try {
+    return {
+      id: Number(sessionStorage.getItem('idEmpleado')) || 1,
+      nombre: sessionStorage.getItem('nombreEmpleado') || 'Cocinero'
+    };
+  } catch { return { id: 1, nombre: 'Cocinero' }; }
+}
+const empleado = getEmpleado();
+
+/* Si usas token JWT, devuélvelo aquí. */
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  try { const t = sessionStorage.getItem('token'); if (t) h.Authorization = `Bearer ${t}`; } catch {}
+  return h;
+}
+
+/* ============ Estado ============ */
+let pedidos = [];
+const enProceso = new Set(); // ids con una petición en curso
+
+/* ============ Utilidades ============ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* Normaliza el pedido por si el backend usa nombres distintos. Ajusta aquí si hace falta. */
+function normalizar(o) {
+  const items = o.detalles ?? o.items ?? o.productos ?? o.detallePedido ?? [];
+  return {
+    id: o.id ?? o.idPedido,
+    idEstado: o.idEstado ?? o.estado?.id ?? ESTADO.PENDIENTE,
+    mesa: o.mesa ?? o.numeroMesa ?? o.idMesa ?? null,
+    fecha: o.fecha ?? o.fechaCreacion ?? o.fechaHora ?? null,
+    notas: o.notas ?? o.observaciones ?? o.comentario ?? '',
+    items: items.map(i => ({
+      nombre: i.nombre ?? i.producto?.nombre ?? i.nombreProducto ?? i.plato ?? 'Producto',
+      cantidad: i.cantidad ?? 1
+    }))
+  };
+}
+
+function hace(fecha) {
+  if (!fecha) return '';
+  const d = new Date(fecha); if (isNaN(d)) return '';
+  const min = Math.max(0, Math.round((Date.now() - d) / 60000));
+  if (min < 1) return 'Recién llegado';
+  if (min < 60) return `Hace ${min} min`;
+  return `Hace ${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function toast(msg, tipo) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (tipo ? ` toast--${tipo}` : '');
+  t.setAttribute('role', 'status');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+/* ============ Render ============ */
+function render() {
+  const pend = pedidos.filter(p => p.idEstado === ESTADO.PENDIENTE).length;
+  const prep = pedidos.filter(p => p.idEstado === ESTADO.EN_PREPARACION).length;
+  $('statPendientes').textContent = pend;
+  $('statPreparacion').textContent = prep;
+  $('resumen').textContent = pedidos.length
+    ? `${pedidos.length} ${pedidos.length === 1 ? 'pedido activo' : 'pedidos activos'}`
+    : 'No hay pedidos por atender';
+
+  if (!pedidos.length) {
+    $('pedidos').innerHTML = `
+      <div class="card empty" style="grid-column:1/-1">
+        <h3>Todo al día</h3>
+        <p class="text-muted" style="margin:0">No hay pedidos pendientes. Actualiza la lista para ver nuevos pedidos.</p>
+      </div>`;
+    return;
+  }
+
+  /* Primero los que ya están en preparación, luego los pendientes más antiguos */
+  const orden = [...pedidos].sort((a, b) =>
+    (b.idEstado === ESTADO.EN_PREPARACION) - (a.idEstado === ESTADO.EN_PREPARACION) || a.id - b.id);
+
+  $('pedidos').innerHTML = orden.map(p => {
+    const cocinando = p.idEstado === ESTADO.EN_PREPARACION;
+    const busy = enProceso.has(p.id) ? 'disabled' : '';
+    const items = p.items.length
+      ? p.items.map(i => `<li><span class="order__qty">${esc(i.cantidad)}×</span><span>${esc(i.nombre)}</span></li>`).join('')
+      : '<li class="text-muted">Sin detalle de productos</li>';
+    return `
+    <article class="card order ${cocinando ? 'order--cooking' : 'order--pending'}">
+      <div class="card__header">
+        <div>
+          <h3 class="order__title">Pedido #${esc(p.id)}${p.mesa ? ` · Mesa ${esc(p.mesa)}` : ''}</h3>
+          <div class="order__sub">${esc(hace(p.fecha))}</div>
+        </div>
+        <span class="badge ${cocinando ? 'badge--warning' : 'badge--gold'}">${cocinando ? 'En preparación' : 'Pendiente'}</span>
+      </div>
+      <div class="card__body">
+        <ul class="order__items">${items}</ul>
+        ${p.notas ? `<div class="order__note"><strong>Nota:</strong> ${esc(p.notas)}</div>` : ''}
+      </div>
+      <div class="card__footer order__actions">
+        ${cocinando
+          ? `<button class="btn btn--dark" ${busy} data-id="${p.id}" data-estado="${ESTADO.ENTREGADO}">Marcar como entregado</button>`
+          : `<button class="btn btn--primary" ${busy} data-id="${p.id}" data-estado="${ESTADO.EN_PREPARACION}">Empezar preparación</button>`}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function mostrarSkeleton() {
+  $('pedidos').innerHTML = '<div class="card skeleton"></div>'.repeat(3);
+}
+
+/* ============ API ============ */
+async function cargarPedidos(silencioso = false) {
+  $('alerta').innerHTML = '';
+  if (!silencioso) mostrarSkeleton();
+  try {
+    const res = await fetch(URL_PENDIENTES, { headers: headers() });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const data = await res.json();
+    const lista = Array.isArray(data) ? data : (data.data ?? data.pedidos ?? []);
+    pedidos = lista.map(normalizar);
+    render();
+  } catch (e) {
+    pedidos = [];
+    render();
+    $('alerta').innerHTML = `<div class="alert alert--danger">No se pudieron cargar los pedidos. Revisa tu conexión e intenta de nuevo.</div>`;
+  }
+}
+
+async function cambiarEstado(id, idEstado) {
+  if (enProceso.has(id)) return;
+  enProceso.add(id); render();
+  try {
+    const res = await fetch(URL_ESTADO, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({ id, idEstado, idEmpleado: empleado.id })
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    if (idEstado === ESTADO.ENTREGADO) {
+      pedidos = pedidos.filter(p => p.id !== id);
+      toast(`Pedido #${id} entregado`, 'success');
+    } else {
+      pedidos = pedidos.map(p => p.id === id ? { ...p, idEstado } : p);
+      toast(`Pedido #${id} en preparación`);
+    }
+  } catch (e) {
+    toast(`No se pudo actualizar el pedido #${id}. Intenta de nuevo.`, 'danger');
+  } finally {
+    enProceso.delete(id); render();
+  }
+}
+
+/* ============ Eventos ============ */
+$('pedidos').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-id]');
+  if (btn) cambiarEstado(Number(btn.dataset.id), Number(btn.dataset.estado));
+});
+$('btnActualizar').addEventListener('click', () => cargarPedidos());
+
+$('nombreEmpleado').textContent = empleado.nombre;
+$('avatar').textContent = empleado.nombre.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
+
+cargarPedidos(); // al entrar a la pantalla
+</script>
+</body>
+</html>
