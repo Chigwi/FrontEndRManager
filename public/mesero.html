@@ -90,7 +90,7 @@
 /* ================= CONFIGURACIÓN =================
    Ajusta las rutas a tu backend. Si la API no responde,
    la página usa datos de ejemplo (modo demo) tomados de la guía. */
-const TEST_USER = { cedula: '1000034908', clave: 'Chigwi23', idEmpleado: 5 };
+const TEST_USER = { cedula: '1000034908', clave: 'Chigwi23', idEmpleado: 3 };
 const AUTH_HEADER = 'Basic ' + btoa(TEST_USER.cedula + ':' + TEST_USER.clave);
 const CONFIG = {
   API: 'http://localhost:8080',
@@ -202,7 +202,7 @@ async function crearPedido() {
   const mesaId = Number($('nuevaMesa').value);
   if (!mesaId) return toast('Indica el número de mesa', 'danger');
   // DTO de la guía: { id, incidente }. mesaId y meseroId son extras: ajústalos a lo que espere tu backend.
-  const dto = { id: TEST_USER.idEmpleado, incidente: $('nuevoIncidente').value.trim(), mesaId, meseroId: CONFIG.MESERO_ID };
+  const dto = { id: null, incidente: $('nuevoIncidente').value.trim(), mesaId, meseroId: CONFIG.MESERO_ID };
   try {
     if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', dto);
     cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarMesas();
