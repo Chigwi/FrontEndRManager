@@ -11,7 +11,7 @@
     admin:    'admin.html',
     gerente:  'menu.html',
     mesero:   'menu.html',
-    cocinero: 'menu.html',
+    cocinero: 'cocinero.html',
     cajero:   'menu.html'
   };
   var DEFAULT_HOME = 'menu.html'; // para cualquier rol que no esté en la lista

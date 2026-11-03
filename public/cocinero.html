@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cocina · Maison Ledger</title>
+<link rel="stylesheet" href="theme.css">
+<script src="auth.js"></script>
+<script>Auth.require(['cocinero', 'admin']); // sin sesión vuelve a login.html; otros roles van a su pantalla</script>
+<style>
+  /* Solo lo específico de esta pantalla; todo lo demás viene de theme.css */
+  .orders { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  .order { display: flex; flex-direction: column; }
+  .order--cooking { border-top: 3px solid var(--warning); }
+  .order--pending { border-top: 3px solid var(--gold); }
+  .order__meta { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+  .order__title { margin: 0; font-size: 1.25rem; }
+  .order__sub { color: var(--gray-500); font-size: .85rem; }
+  .order__items { list-style: none; margin: 0; padding: 0; }
+  .order__items li { display: flex; gap: .75rem; padding: .5rem 0; border-bottom: 1px dashed var(--gray-200); }
+  .order__items li:last-child { border-bottom: 0; }
+  .order__qty { min-width: 2.2rem; font-weight: 700; color: var(--gold-dark); }
+  .order__note { margin-top: .75rem; padding: .55rem .75rem; background: var(--gold-tint); border-radius: var(--radius); font-size: .88rem; }
+  .order__actions { display: flex; gap: .6rem; }
+  .order__actions .btn { flex: 1; }
+  .empty { text-align: center; padding: 3rem 1rem; }
+  .empty h3 { margin-bottom: .25rem; }
+  .skeleton { height: 200px; background: linear-gradient(90deg, var(--gray-100), var(--gray-50), var(--gray-100)); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
+  @keyframes sk { to { background-position: -200% 0; } }
+
+  /* ---------- Menú de usuario y cierre de sesión ---------- */
+  .user-btn {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .25rem .6rem .25rem .25rem; font: inherit; color: var(--white);
+    background: transparent; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .user-btn:hover, .dropdown.is-open .user-btn { background: rgba(255,255,255,.08); border-color: var(--gold); }
+  .user-btn__text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; text-align: left; }
+  .user-btn__name { font-weight: 600; font-size: .9rem; }
+  .user-btn__rol { font-size: .75rem; color: var(--gold-light); text-transform: capitalize; }
+  .user-btn__chev { width: 8px; height: 8px; border-right: 2px solid var(--gray-300); border-bottom: 2px solid var(--gray-300); transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+  .dropdown.is-open .user-btn__chev { transform: rotate(-135deg) translateY(-2px); }
+  .user-menu { min-width: 270px; padding: 0; overflow: hidden; }
+  .user-card { display: flex; align-items: center; gap: .8rem; padding: 1rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+  .user-card .avatar { width: 44px; height: 44px; font-size: 1rem; flex: none; }
+  .user-card__name { font-weight: 600; color: var(--black); line-height: 1.2; }
+  .user-card__mail { font-size: .82rem; color: var(--gray-500); overflow-wrap: anywhere; }
+  .user-card .badge { margin-top: .35rem; text-transform: capitalize; }
+  .user-menu__list { padding: .35rem; }
+  .dropdown__item--icon { display: flex; align-items: center; gap: .65rem; font-weight: 500; }
+  .dropdown__item--danger:hover { background: var(--danger-bg); }
+  .dropdown__item svg { width: 18px; height: 18px; flex: none; }
+  .modal__icon { width: 48px; height: 48px; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--danger-bg); color: var(--danger); }
+  .modal__icon svg { width: 24px; height: 24px; }
+  @media (max-width: 700px) {
+    .user-btn__text { display: none; }
+    .user-btn { padding-right: .5rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar__brand" href="cocina.html"><span>&#9670;</span> Maison Ledger</a>
+  <ul class="navbar__links">
+    <li><a class="is-active" href="cocina.html">Cocina</a></li>
+  </ul>
+
+  <div class="navbar__actions">
+    <div class="dropdown" id="userDropdown">
+      <button class="user-btn" id="btnUsuario" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menú de usuario">
+        <span class="avatar" id="uAvatar">?</span>
+        <span class="user-btn__text">
+          <span class="user-btn__name" id="uNombre">Usuario</span>
+          <span class="user-btn__rol" id="uRol"></span>
+        </span>
+        <span class="user-btn__chev" aria-hidden="true"></span>
+      </button>
+      <div class="dropdown__menu user-menu" role="menu">
+        <div class="user-card">
+          <span class="avatar" id="uAvatar2">?</span>
+          <div>
+            <div class="user-card__name" id="uNombre2">Usuario</div>
+            <div class="user-card__mail" id="uCorreo"></div>
+            <span class="badge badge--dark" id="uRol2"></span>
+          </div>
+        </div>
+        <div class="user-menu__list">
+          <button class="dropdown__item dropdown__item--icon dropdown__item--danger" id="btnSalir" type="button" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="main" style="max-width:1200px;margin:0 auto;">
+  <div class="page-header">
+    <div>
+      <h1>Pedidos en cocina</h1>
+      <div class="text-muted" id="resumen">Cargando pedidos…</div>
+    </div>
+    <button class="btn btn--outline" id="btnActualizar">Actualizar lista</button>
+  </div>
+
+  <div class="grid grid--stats">
+    <div class="card stat stat--dark"><div class="stat__label">Pendientes</div><div class="stat__value" id="statPendientes">–</div><div class="stat__delta">Por empezar</div></div>
+    <div class="card stat"><div class="stat__label">En preparación</div><div class="stat__value" id="statPreparacion">–</div><div class="stat__delta">En marcha ahora</div></div>
+  </div>
+
+  <div id="alerta"></div>
+  <div class="orders" id="pedidos"></div>
+</main>
+
+<div class="toast-stack" id="toasts"></div>
+
+<!-- Confirmación de cierre de sesión -->
+<div class="modal-backdrop" id="salir">
+  <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="sTitulo">
+    <div class="modal__body">
+      <div class="modal__icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+      <h2 class="modal__title" id="sTitulo">¿Cerrar sesión?</h2>
+      <p class="text-muted" style="margin:.5rem 0 0">Tendrás que ingresar de nuevo con tu cédula y contraseña.</p>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--outline" id="sCancelar" type="button">Seguir aquí</button>
+      <button class="btn btn--danger" id="sConfirmar" type="button">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ Configuración ============ */
+const API_BASE = 'http://localhost:8080';  // dirección completa de tu backend
+const URL_PENDIENTES = `${API_BASE}/api/ordenes/pedido/pendientes`;
+const URL_ESTADO     = `${API_BASE}/api/ordenes/pedido/estado`;
+
+const ESTADO = { PENDIENTE: 1, EN_PREPARACION: 2, ENTREGADO: 3 };
+
+/* Empleado que inició sesión (viene de la sesión guardada por login.html) */
+function getEmpleado() {
+  const u = Auth.user() || {};
+  return {
+    id: Number(u.id_empleado ?? u.idEmpleado ?? u.id) || null,
+    nombre: [u.nombre, u.apellido].filter(Boolean).join(' ') || 'Cocinero'
+  };
+}
+const empleado = getEmpleado();
+
+/* Envía el token (o, mientras no haya, las credenciales del usuario que inició sesión). */
+// auth.js no trae authHeader(). Si hay token se usa; si no, las mismas credenciales de prueba
+// del resto del proyecto (cambiar cuando el login entregue un token real).
+const AUTH_PRUEBA = 'Basic ' + btoa('1000034908:Chigwi23');
+function authHeader() {
+  const t = Auth.token();
+  return t ? 'Bearer ' + t : AUTH_PRUEBA;
+}
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  const a = authHeader();
+  if (a) h.Authorization = a;
+  return h;
+}
+
+/* ============ Estado ============ */
+let pedidos = [];
+const enProceso = new Set(); // ids con una petición en curso
+
+/* ============ Utilidades ============ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ============ Sesión: datos del usuario y cierre de sesión ============ */
+function pintarUsuario() {
+  const u = Auth.user() || {};
+  const nombre = [u.nombre, u.apellido].filter(Boolean).join(' ') || 'Usuario';
+  const iniciales = (((u.nombre || '')[0] || '') + ((u.apellido || '')[0] || '')).toUpperCase() || '?';
+  const rol = u.rol || '';
+  $('uAvatar').textContent = iniciales;   $('uAvatar2').textContent = iniciales;
+  $('uNombre').textContent = nombre;      $('uNombre2').textContent = nombre;
+  $('uRol').textContent = rol;            $('uRol2').textContent = rol;
+  $('uRol2').hidden = !rol;
+  $('uCorreo').textContent = u.correo || '';
+}
+
+function menuUsuario(abrir) {
+  const d = $('userDropdown');
+  const abierto = abrir === undefined ? !d.classList.contains('is-open') : abrir;
+  d.classList.toggle('is-open', abierto);
+  $('btnUsuario').setAttribute('aria-expanded', abierto);
+}
+
+function pedirSalir() {
+  menuUsuario(false);
+  $('salir').classList.add('is-open');
+  $('sCancelar').focus();
+}
+function cancelarSalir() {
+  $('salir').classList.remove('is-open');
+  $('btnUsuario').focus();
+}
+
+$('btnUsuario').addEventListener('click', e => { e.stopPropagation(); menuUsuario(); });
+document.addEventListener('click', e => { if (!$('userDropdown').contains(e.target)) menuUsuario(false); });
+$('btnSalir').addEventListener('click', pedirSalir);
+$('sCancelar').addEventListener('click', cancelarSalir);
+$('sConfirmar').addEventListener('click', () => Auth.logout());
+$('salir').addEventListener('click', e => { if (e.target === $('salir')) cancelarSalir(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('salir').classList.contains('is-open')) cancelarSalir();
+  else menuUsuario(false);
+});
+
+/* ============ Pedidos ============ */
+/* Normaliza el pedido por si el backend usa nombres distintos. Ajusta aquí si hace falta. */
+function normalizar(o) {
+  const items = o.detalles ?? o.items ?? o.productos ?? o.detallePedido ?? [];
+  return {
+    id: o.id_pedido ?? o.id ?? o.idPedido,
+    idEstado: o.idEstado ?? o.estado?.id_estado ?? o.estado?.id ?? ESTADO.PENDIENTE,
+    mesa: (o.mesa && typeof o.mesa === 'object' ? o.mesa.id : o.mesa) ?? o.numeroMesa ?? o.idMesa ?? null,
+    fecha: o.fecha_creacion ?? o.fecha ?? o.fechaCreacion ?? o.fechaHora ?? null,
+    notas: o.notas ?? o.observaciones ?? o.comentario ?? '',
+    items: items.map(i => ({
+      nombre: i.nombre ?? i.producto?.nombre ?? i.nombreProducto ?? i.plato ?? 'Producto',
+      cantidad: i.cantidad ?? 1
+    }))
+  };
+}
+
+function hace(fecha) {
+  if (!fecha) return '';
+  const d = new Date(fecha); if (isNaN(d)) return '';
+  const min = Math.max(0, Math.round((Date.now() - d) / 60000));
+  if (min < 1) return 'Recién llegado';
+  if (min < 60) return `Hace ${min} min`;
+  return `Hace ${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function toast(msg, tipo) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (tipo ? ` toast--${tipo}` : '');
+  t.setAttribute('role', 'status');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+/* ============ Render ============ */
+function render() {
+  const pend = pedidos.filter(p => p.idEstado === ESTADO.PENDIENTE).length;
+  const prep = pedidos.filter(p => p.idEstado === ESTADO.EN_PREPARACION).length;
+  $('statPendientes').textContent = pend;
+  $('statPreparacion').textContent = prep;
+  $('resumen').textContent = pedidos.length
+    ? `${pedidos.length} ${pedidos.length === 1 ? 'pedido activo' : 'pedidos activos'}`
+    : 'No hay pedidos por atender';
+
+  if (!pedidos.length) {
+    $('pedidos').innerHTML = `
+      <div class="card empty" style="grid-column:1/-1">
+        <h3>Todo al día</h3>
+        <p class="text-muted" style="margin:0">No hay pedidos pendientes. Actualiza la lista para ver nuevos pedidos.</p>
+      </div>`;
+    return;
+  }
+
+  /* Primero los que ya están en preparación, luego los pendientes más antiguos */
+  const orden = [...pedidos].sort((a, b) =>
+    (b.idEstado === ESTADO.EN_PREPARACION) - (a.idEstado === ESTADO.EN_PREPARACION) || a.id - b.id);
+
+  $('pedidos').innerHTML = orden.map(p => {
+    const cocinando = p.idEstado === ESTADO.EN_PREPARACION;
+    const busy = enProceso.has(p.id) ? 'disabled' : '';
+    const items = p.items.length
+      ? p.items.map(i => `<li><span class="order__qty">${esc(i.cantidad)}×</span><span>${esc(i.nombre)}</span></li>`).join('')
+      : '<li class="text-muted">Sin detalle de productos</li>';
+    return `
+    <article class="card order ${cocinando ? 'order--cooking' : 'order--pending'}">
+      <div class="card__header">
+        <div>
+          <h3 class="order__title">Pedido #${esc(p.id)}${p.mesa ? ` · Mesa ${esc(p.mesa)}` : ''}</h3>
+          <div class="order__sub">${esc(hace(p.fecha))}</div>
+        </div>
+        <span class="badge ${cocinando ? 'badge--warning' : 'badge--gold'}">${cocinando ? 'En preparación' : 'Pendiente'}</span>
+      </div>
+      <div class="card__body">
+        <ul class="order__items">${items}</ul>
+        ${p.notas ? `<div class="order__note"><strong>Nota:</strong> ${esc(p.notas)}</div>` : ''}
+      </div>
+      <div class="card__footer order__actions">
+        ${cocinando
+          ? `<button class="btn btn--dark" ${busy} data-id="${p.id}" data-estado="${ESTADO.ENTREGADO}">Marcar como entregado</button>`
+          : `<button class="btn btn--primary" ${busy} data-id="${p.id}" data-estado="${ESTADO.EN_PREPARACION}">Empezar preparación</button>`}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function mostrarSkeleton() {
+  $('pedidos').innerHTML = '<div class="card skeleton"></div>'.repeat(3);
+}
+
+/* ============ API ============ */
+function mostrarError(msg) {
+  $('alerta').innerHTML = `<div class="alert alert--danger" role="alert">${esc(msg)}</div>`;
+}
+
+async function cargarPedidos(silencioso = false) {
+  $('alerta').innerHTML = '';
+  if (!silencioso) mostrarSkeleton();
+  try {
+    const res = await fetch(URL_PENDIENTES, { headers: headers() });
+    const texto = await res.text();
+    // Para depurar: abre la consola (F12) y mira esta línea
+    console.log('[cocina] URL:', res.url, '| estado:', res.status, '| respuesta:', texto.slice(0, 500));
+
+    if (res.status === 401 || res.status === 403) {
+      pedidos = []; render();
+      mostrarError(authHeader()
+        ? `El servidor rechazó la petición (${res.status}). Es posible que tu usuario no tenga permiso para ver los pedidos.`
+        : 'Tu sesión no tiene credenciales para el servidor. Cierra sesión e ingresa de nuevo.');
+      return;
+    }
+    if (!res.ok) {
+      pedidos = []; render();
+      mostrarError(`El servidor respondió con error ${res.status}. Revisa la URL (URL_PENDIENTES) y los registros del backend.`);
+      return;
+    }
+    let data = [];
+    try { data = texto ? JSON.parse(texto) : []; } catch { throw new Error('La respuesta no es JSON'); }
+    const lista = Array.isArray(data) ? data : (data.data ?? data.pedidos ?? []);
+    pedidos = lista.map(normalizar);
+    render();
+  } catch (e) {
+    console.error('[cocina] error:', e);
+    pedidos = [];
+    render();
+    mostrarError('No se pudo conectar con el servidor. Revisa que el backend esté encendido, la URL y el CORS (consola, F12).');
+  }
+}
+
+async function cambiarEstado(id, idEstado) {
+  if (enProceso.has(id)) return;
+  if (!empleado.id) { toast('No se pudo identificar al empleado. Cierra sesión e ingresa de nuevo.', 'danger'); return; }
+  enProceso.add(id); render();
+  try {
+    const res = await fetch(URL_ESTADO, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({ id, idEstado, idEmpleado: empleado.id })
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    if (idEstado === ESTADO.ENTREGADO) {
+      pedidos = pedidos.filter(p => p.id !== id);
+      toast(`Pedido #${id} entregado`, 'success');
+    } else {
+      pedidos = pedidos.map(p => p.id === id ? { ...p, idEstado } : p);
+      toast(`Pedido #${id} en preparación`);
+    }
+  } catch (e) {
+    toast(`No se pudo actualizar el pedido #${id}. Intenta de nuevo.`, 'danger');
+  } finally {
+    enProceso.delete(id); render();
+  }
+}
+
+/* ============ Eventos ============ */
+$('pedidos').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-id]');
+  if (btn) cambiarEstado(Number(btn.dataset.id), Number(btn.dataset.estado));
+});
+$('btnActualizar').addEventListener('click', () => cargarPedidos());
+
+// Solo carga datos si hay sesión (si no, Auth.require() ya redirigió al login)
+if (Auth.isLoggedIn()) {
+  pintarUsuario();
+  cargarPedidos(); // al entrar a la pantalla
+}
+</script>
+</body>
+</html>
