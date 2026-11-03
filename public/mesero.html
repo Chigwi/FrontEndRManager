@@ -158,7 +158,7 @@ async function cargarMesas() {
     mesas = DEMO.mesas; demo = true;
     $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>'; }
   if (!demo) {
-  const porMesa = await mapaPedidosPorMesa();
+    const porMesa = await mapaPedidosPorMesa();
   mesas.forEach(m => { m.pedidoId = porMesa[m.mesaId]; });
   }
   if (mesas[0]) { $('meseroNombre').textContent = mesas[0].nombreEmpleado; $('meseroAvatar').textContent = mesas[0].nombreEmpleado[0].toUpperCase(); }
