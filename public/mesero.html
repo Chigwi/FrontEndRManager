@@ -202,7 +202,7 @@ async function crearPedido() {
   const mesaId = Number($('nuevaMesa').value);
   if (!mesaId) return toast('Indica el número de mesa', 'danger');
   // DTO de la guía: { id, incidente }. mesaId y meseroId son extras: ajústalos a lo que espere tu backend.
-  const dto = { id: null, incidente: $('nuevoIncidente').value.trim(), mesaId, meseroId: CONFIG.MESERO_ID };
+  const dto = { id_mesa: mesaId, id_mesero: CONFIG.MESERO_ID };
   try {
     if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', dto);
     cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarMesas();
