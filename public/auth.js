@@ -8,7 +8,7 @@
 
   // Pantalla de inicio según el rol. Cambia aquí el destino de cada uno.
   var ROLE_HOME = {
-    admin:    'menu.html',
+    admin:    'admin.html',
     gerente:  'menu.html',
     mesero:   'menu.html',
     cocinero: 'menu.html',
