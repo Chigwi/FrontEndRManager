@@ -90,9 +90,11 @@
 /* ================= CONFIGURACIÓN =================
    Ajusta las rutas a tu backend. Si la API no responde,
    la página usa datos de ejemplo (modo demo) tomados de la guía. */
+const TEST_USER = { cedula: '1000034908', clave: 'Chigwi23', idEmpleado: 5 };
+const AUTH_HEADER = 'Basic ' + btoa(TEST_USER.cedula + ':' + TEST_USER.clave);
 const CONFIG = {
   API: 'http://localhost:8080',
-  MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || 5,
+  MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || TEST_USER.idEmpleado,
   rutas: {
     mesasEmpleado: id => `/api/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
     pedido:        id => `/api/pedido/${id}`,               // GET  -> pedido completo
@@ -103,7 +105,7 @@ const CONFIG = {
   },
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
 };
-const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
+//const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
 /* ================= DATOS DEMO ================= */
 const DEMO = {
   mesas: [{ nombreEmpleado: 'Jane', mesaId: 2, estado: 'Pendiente' }],
@@ -131,9 +133,8 @@ function toast(msg, tipo) {
   t.textContent = msg; $('toasts').appendChild(t);
   setTimeout(() => t.remove(), 3500);
 }
-
 async function api(ruta, metodo = 'GET', cuerpo) {
-  const headers = { ...AUTH.headers };
+  const headers = { 'Authorization': AUTH_HEADER };
   if (cuerpo) headers['Content-Type'] = 'application/json';
   const r = await fetch(CONFIG.API + ruta, {
     method: metodo,
