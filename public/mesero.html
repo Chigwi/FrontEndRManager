@@ -16,7 +16,14 @@
   .empty { padding:2rem; text-align:center; color:var(--gray-500); grid-column:1/-1; }
   .main--full { max-width:1100px; margin:0 auto; padding:2rem; }
   .tabs { margin-bottom:1.25rem; }
-  @media (max-width:560px){ .main--full{ padding:1.25rem; } }
+  .seccion { font-size:1rem; margin:1.25rem 0 .6rem; }
+  .prod { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.55rem .75rem; border:1px solid var(--gray-200); border-radius:var(--radius); margin-bottom:.4rem; }
+  .prod__info { min-width:0; }
+  .prod__sub { font-size:.82rem; color:var(--gray-500); }
+  .prod-add { display:flex; gap:.5rem; align-items:center; margin-top:.75rem; }
+  .prod-add .input, .prod-add .select { flex:1; min-width:0; }
+  .prod-add .cant { flex:0 0 80px; }
+  @media (max-width:560px){ .main--full{ padding:1.25rem; } .prod-add{ flex-wrap:wrap; } }
 </style>
 </head>
 <body>
@@ -48,20 +55,34 @@
 
 <!-- Modal: detalle / edición de pedido -->
 <div class="modal-backdrop" id="mPedido">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tPedido">
+  <div class="modal modal--lg" role="dialog" aria-modal="true" aria-labelledby="tPedido">
     <div class="modal__header"><h2 class="modal__title" id="tPedido">Pedido</h2><button class="modal__close" onclick="cerrar('mPedido')" aria-label="Cerrar">&times;</button></div>
     <div class="modal__body">
       <dl class="detail" id="detalle"></dl>
       <hr>
-      <div class="field">
-        <label class="label" for="metodo">Método de pago</label>
-        <select class="select" id="metodo"></select>
+
+      <h3 class="seccion">Datos del pedido</h3>
+      <div class="form-row">
+        <div class="field">
+          <label class="label" for="mesaPedido">Mesa</label>
+          <input class="input" id="mesaPedido" type="number" min="1">
+        </div>
+        <div class="field">
+          <label class="label" for="metodo">Método de pago</label>
+          <select class="select" id="metodo"></select>
+        </div>
       </div>
       <div class="field">
         <label class="label" for="incidente">Incidente</label>
         <textarea class="textarea" id="incidente" placeholder="Describe cualquier incidente con el pedido"></textarea>
-        <div class="field__hint">Se guarda en el pedido.</div>
       </div>
+      <div class="field__hint">Mesa, método de pago e incidente se guardan con «Guardar cambios».</div>
+
+      <hr>
+      <h3 class="seccion">Productos</h3>
+      <div id="productos"></div>
+      <div class="prod-add" id="addProd"></div>
+      <div class="field__hint">Añadir y quitar productos se aplica al instante.</div>
     </div>
     <div class="modal__footer">
       <button class="btn btn--ghost" onclick="cerrar('mPedido')">Cerrar</button>
@@ -97,14 +118,27 @@ const CONFIG = {
   API: 'http://localhost:8080',
   MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || TEST_USER.idEmpleado,
   rutas: {
-    mesasEmpleado:     id => `/api/ordenes/mesasEmpleado/${id}`,   // GET -> [{nombreEmpleado, mesaId, estado}]
-    pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`, // GET -> [pedido completo]
-    pedido:            id => `/api/ordenes/pedido/${id}`,          // GET -> pedido completo
-    crearPedido:       '/api/ordenes/pedido',                      // POST -> { id_mesa, id_mesero }
-    editarPedido:      id => `/api/ordenes/pedido/${id}`,          // PUT  -> { id, incidente }
-    metodoPago:        '/api/pedido/metodoDePago'                  // PUT  -> { idPedido, idMetodo }
+    mesasEmpleado:     id => `/api/ordenes/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
+    pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`,      // GET  -> [Pedido]
+    pedido:            id => `/api/ordenes/${id}`,                      // GET  -> Pedido
+    crearPedido:       '/api/ordenes/pedido',                           // POST -> PedidoInsertDTO
+    mesa:              '/api/ordenes/pedido/mesa',                      // PUT  -> PedidoUpdateMesaDTO
+    incidente:         '/api/ordenes/pedido/incidente',                 // PUT  -> PedidoUpdateIncidenteDTO
+    metodoPago:        '/api/ordenes/pedido/metodoDePago',              // PUT  -> PedidoUpdateMetodoDePagoDTO
+    agregarProductos:  id => `/api/ordenes/pedido/productos/add/${id}`,    // PUT -> [Detalle_producto]  (devuelve Pedido)
+    quitarProductos:   id => `/api/ordenes/pedido/productos/remove/${id}`, // PUT -> [Long]              (devuelve Pedido)
+    catalogo:          '/api/menu/productos'                            // GET  -> [{id, nombre}]  (AJUSTAR a tu ruta real del menú)
   },
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
+};
+
+/* Cuerpos de cada petición. Si el backend usa otros nombres de campo, se cambian SOLO aquí. */
+const DTO = {
+  crearPedido: (idMesa, idMesero)   => ({ id_mesa: idMesa, id_mesero: idMesero }),
+  mesa:        (idPedido, idMesa)   => ({ idPedido, idMesa }),            // PedidoUpdateMesaDTO (supuesto)
+  incidente:   (id, incidente)      => ({ id, incidente }),               // según la guía
+  metodoPago:  (idPedido, idMetodo) => ({ idPedido, idMetodo }),          // según la guía
+  detalle:     (idProducto, cantidad) => ({ id_producto: idProducto, cantidad }) // Detalle_producto (supuesto)
 };
 
 /* ================= DATOS DEMO ================= */
@@ -118,7 +152,7 @@ const DEMO = {
     precio_total: null, metodo_de_pago: 'Tarjeta'
   }]
 };
-let demo = false, actual = null, vista = 'pedidos', pedidos = [], mesas = [];
+let demo = false, actual = null, vista = 'pedidos', pedidos = [], mesas = [], catalogo = null;
 
 /* ================= UTILIDADES ================= */
 const $ = id => document.getElementById(id);
@@ -136,17 +170,25 @@ function toast(msg, tipo) {
 }
 async function api(ruta, metodo = 'GET', cuerpo) {
   const headers = { 'Authorization': AUTH_HEADER };
-  if (cuerpo) headers['Content-Type'] = 'application/json';
+  if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
   const r = await fetch(CONFIG.API + ruta, {
-    method: metodo, headers, body: cuerpo ? JSON.stringify(cuerpo) : undefined
+    method: metodo, headers, body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const txt = await r.text();
-  return txt ? JSON.parse(txt) : null;
+  try { return txt ? JSON.parse(txt) : null; } catch { return txt; }  // algunos endpoints devuelven texto plano
 }
 const claseEstado = e => ({ pendiente:'badge--warning', preparando:'badge--gold', 'en cocina':'badge--warning', servido:'badge--success', cancelado:'badge--danger' }[String(e).toLowerCase()] || '');
 const fecha = f => f ? new Date(f).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const dinero = n => n == null ? 'Sin calcular' : '$' + Number(n).toLocaleString('es-CO');
+
+// El incidente puede venir como texto o como objeto (entidad Incidente)
+const textoIncidente = i => i == null ? '' : typeof i === 'object' ? (i.descripcion ?? i.incidente ?? i.detalle ?? '') : String(i);
+
+// Productos del pedido: el nombre del campo depende de la entidad Pedido
+const productosDe = p => { const l = p?.productos ?? p?.detalles ?? p?.detalle_productos ?? p?.detalleProductos ?? []; return Array.isArray(l) ? l : []; };
+const idProd  = x => x?.id ?? x?.id_detalle ?? x?.id_producto ?? x?.producto?.id ?? x?.producto?.id_producto;
+const nomProd = x => x?.nombre ?? x?.producto?.nombre ?? ('Producto ' + idProd(x));
 
 /* ================= CARGA ================= */
 async function cargarTodo() {
@@ -177,7 +219,7 @@ function cambiarVista(v) {
   pintar();
 }
 
-/* ================= PINTAR ================= */
+/* ================= PINTAR LISTAS ================= */
 function pintar() {
   const esPedidos = vista === 'pedidos';
   $('titulo').textContent = esPedidos ? 'Mis pedidos' : 'Mis mesas';
@@ -204,33 +246,112 @@ function pintar() {
   }
 }
 
-/* ================= DETALLE / EDICIÓN (solo pedidos) ================= */
+/* ================= POP UP DEL PEDIDO ================= */
 async function verPedido(id) {
   try { actual = demo ? pedidos.find(p => p.id_pedido === id) : await api(CONFIG.rutas.pedido(id)); }
   catch (e) { console.error(e); return toast('No se pudo cargar el pedido ' + id, 'danger'); }
+  if (!actual) return toast('No se encontró el pedido ' + id, 'danger');
+  await cargarCatalogo();
+  pintarPedido();
+  abrir('mPedido');
+}
+
+function pintarDetalle() {
   $('tPedido').textContent = 'Pedido #' + actual.id_pedido;
   $('detalle').innerHTML = `
-    <dt>Mesa</dt><dd>${esc(actual.mesa?.id)} (cupo ${esc(actual.mesa?.cupo)})</dd>
     <dt>Estado</dt><dd><span class="badge ${claseEstado(actual.estado?.nombre)}">${esc(actual.estado?.nombre)}</span></dd>
     <dt>Mesero</dt><dd>${esc(actual.mesero?.nombre)} ${esc(actual.mesero?.apellido)}</dd>
     <dt>Creado</dt><dd>${fecha(actual.fecha_creacion)}</dd>
     <dt>Última actualización</dt><dd>${fecha(actual.fecha_ultima_actualizacion)}</dd>
     <dt>Total</dt><dd>${esc(dinero(actual.precio_total))}</dd>`;
-  $('metodo').innerHTML = CONFIG.metodos.map(m =>
-    `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
-  $('incidente').value = actual.incidente || '';
-  abrir('mPedido');
 }
 
+function pintarProductos() {
+  const lista = productosDe(actual);
+  $('productos').innerHTML = lista.length ? lista.map(x => {
+    const id = idProd(x);
+    const cant = x.cantidad != null ? `Cantidad: ${esc(x.cantidad)}` : '';
+    return `<div class="prod">
+      <div class="prod__info"><div>${esc(nomProd(x))}</div><div class="prod__sub">${cant}</div></div>
+      <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Quitar</button>
+    </div>`;
+  }).join('') : '<div class="text-muted">Este pedido aún no tiene productos.</div>';
+}
+
+function pintarPedido() {
+  pintarDetalle();
+  $('mesaPedido').value = actual.mesa?.id ?? '';
+  $('metodo').innerHTML = CONFIG.metodos.map(m =>
+    `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
+  $('incidente').value = textoIncidente(actual.incidente);
+  pintarProductos();
+  // selector de producto: del catálogo si cargó, si no, por id
+  const selector = catalogo && catalogo.length
+    ? `<select class="select" id="prodSel">${catalogo.map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}</option>`).join('')}</select>`
+    : `<input class="input" id="prodSel" type="number" min="1" placeholder="ID del producto">`;
+  $('addProd').innerHTML = `${selector}
+    <input class="input cant" id="prodCant" type="number" min="1" value="1" aria-label="Cantidad">
+    <button class="btn btn--dark btn--sm" onclick="agregarProducto()">Añadir</button>`;
+}
+
+async function cargarCatalogo() {
+  if (catalogo !== null || demo) return;
+  try { const l = await api(CONFIG.rutas.catalogo); catalogo = Array.isArray(l) ? l : []; }
+  catch (e) { console.error('Catálogo no disponible:', e); catalogo = []; }
+}
+
+/* Una función por endpoint del backend */
+const actualizarMesa       = (id, idMesa)   => api(CONFIG.rutas.mesa,       'PUT', DTO.mesa(id, idMesa));
+const actualizarIncidente  = (id, texto)    => api(CONFIG.rutas.incidente,  'PUT', DTO.incidente(id, texto));
+const actualizarMetodoPago = (id, idMetodo) => api(CONFIG.rutas.metodoPago, 'PUT', DTO.metodoPago(id, idMetodo));
+
+// Productos: el backend devuelve el Pedido actualizado
+async function aplicarProductos(promesa, okMsg) {
+  if (demo) return toast('Modo demo: no se envió nada');
+  try {
+    const p = await promesa;
+    if (p && typeof p === 'object') actual = p; else actual = await api(CONFIG.rutas.pedido(actual.id_pedido));
+    pintarDetalle(); pintarProductos(); toast(okMsg, 'success'); cargarTodo();
+  } catch (e) { console.error(e); toast('No se pudo actualizar los productos', 'danger'); }
+}
+function agregarProducto() {
+  const idProducto = Number($('prodSel').value), cantidad = Number($('prodCant').value) || 1;
+  if (!idProducto) return toast('Elige un producto', 'danger');
+  aplicarProductos(
+    demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.detalle(idProducto, cantidad)]),
+    'Producto añadido');
+}
+function quitarProducto(idProducto) {
+  aplicarProductos(
+    demo ? null : api(CONFIG.rutas.quitarProductos(actual.id_pedido), 'PUT', [idProducto]),
+    'Producto quitado');
+}
+
+// Mesa, método de pago e incidente: solo se envía lo que cambió, cada uno a su endpoint
 async function guardarPedido() {
   const id = actual.id_pedido;
-  try {
-    if (!demo) {
-      await api(CONFIG.rutas.editarPedido(id), 'PUT', { id, incidente: $('incidente').value.trim() });
-      await api(CONFIG.rutas.metodoPago, 'PUT', { idPedido: id, idMetodo: Number($('metodo').value) });
-    }
-    cerrar('mPedido'); toast('Pedido actualizado', 'success'); cargarTodo();
-  } catch (e) { console.error(e); toast('No se pudieron guardar los cambios', 'danger'); }
+  const tareas = [];
+
+  const mesaNueva = Number($('mesaPedido').value);
+  if (mesaNueva && mesaNueva !== actual.mesa?.id) tareas.push(['mesa', actualizarMesa(id, mesaNueva)]);
+
+  const metodoSel = CONFIG.metodos.find(m => m.id === Number($('metodo').value));
+  if (metodoSel && metodoSel.nombre !== actual.metodo_de_pago) tareas.push(['método de pago', actualizarMetodoPago(id, metodoSel.id)]);
+
+  const texto = $('incidente').value.trim();
+  if (texto !== textoIncidente(actual.incidente).trim()) tareas.push(['incidente', actualizarIncidente(id, texto)]);
+
+  if (!tareas.length) return toast('No hay cambios que guardar');
+  if (demo) { cerrar('mPedido'); return toast('Modo demo: no se envió nada'); }
+
+  const res = await Promise.allSettled(tareas.map(t => t[1]));
+  res.forEach(r => r.status === 'rejected' && console.error(r.reason));
+  const fallos = res.map((r, i) => r.status === 'rejected' ? tareas[i][0] : null).filter(Boolean);
+
+  try { actual = await api(CONFIG.rutas.pedido(id)); } catch (e) { console.error(e); }  // estado real tras guardar
+  if (fallos.length) { pintarPedido(); toast('No se pudo guardar: ' + fallos.join(', '), 'danger'); }
+  else { cerrar('mPedido'); toast('Pedido actualizado', 'success'); }
+  cargarTodo();
 }
 
 /* ================= NUEVO PEDIDO ================= */
@@ -239,7 +360,7 @@ async function crearPedido() {
   const mesaId = Number($('nuevaMesa').value);
   if (!mesaId) return toast('Indica el número de mesa', 'danger');
   try {
-    if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', { id_mesa: mesaId, id_mesero: CONFIG.MESERO_ID });
+    if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', DTO.crearPedido(mesaId, CONFIG.MESERO_ID));
     cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarTodo();
   } catch (e) { console.error(e); toast('No se pudo crear el pedido', 'danger'); }
 }
