@@ -135,7 +135,7 @@ const CONFIG = {
 /* Cuerpos de cada petición. Si el backend usa otros nombres de campo, se cambian SOLO aquí. */
 const DTO = {
   crearPedido: (idMesa, idMesero)   => ({ id_mesa: idMesa, id_mesero: idMesero }),
-  mesa:        (idPedido, idMesa)   => ({ idPedido, idMesa }),            // PedidoUpdateMesaDTO (supuesto)
+  mesa:        (idPedido, idMesa) => ({ id: idPedido, idmesa: idMesa }),  // PedidoUpdateMesaDTO (supuesto)
   incidente:   (id, incidente)      => ({ id, incidente }),               // según la guía
   metodoPago:  (idPedido, idMetodo) => ({ idPedido, idMetodo }),          // según la guía
   detalle:     (idProducto, cantidad) => ({ id_producto: idProducto, cantidad }) // Detalle_producto (supuesto)
