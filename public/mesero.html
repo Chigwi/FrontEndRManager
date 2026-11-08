@@ -20,7 +20,7 @@
   .prod { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.55rem .75rem; border:1px solid var(--gray-200); border-radius:var(--radius); margin-bottom:.4rem; }
   .prod__info { min-width:0; }
   .prod__sub { font-size:.82rem; color:var(--gray-500); }
-  .prod-add { display:flex; gap:.5rem; align-items:center; margin-top:.75rem; }
+  .prod-add { display:flex; gap:.5rem; align-items:center; }
   .prod-add .input, .prod-add .select { flex:1; min-width:0; }
   @media (max-width:560px){ .main--full{ padding:1.25rem; } .prod-add{ flex-wrap:wrap; } }
 </style>
@@ -80,9 +80,9 @@
 
       <hr>
       <h3 class="seccion">Productos</h3>
-      <div id="productos"></div>
       <div class="prod-add" id="addProd"></div>
-      <div class="field__hint">Añadir y quitar productos se aplica al instante.</div>
+      <div class="field__hint">Añadir y eliminar productos se aplica al instante.</div>
+      <div id="productos" style="margin-top:.9rem"></div>
     </div>
     <div class="modal__footer">
       <button class="btn btn--ghost" onclick="cerrar('mPedido')">Cerrar</button>
@@ -309,7 +309,7 @@ function pintarProductos() {
     const cant = [precioProd(x) != null ? esc(dinero(precioProd(x))) : '', x.notas ? `Notas: ${esc(x.notas)}` : ''].filter(Boolean).join(' · ');
     return `<div class="prod">
       <div class="prod__info"><div>${esc(nomProd(x))}</div><div class="prod__sub">${cant}</div></div>
-      <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Quitar</button>
+      <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Eliminar</button>
     </div>`;
   }).join('') : '<div class="text-muted">Este pedido aún no tiene productos.</div>';
 }
