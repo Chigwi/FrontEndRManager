@@ -125,6 +125,7 @@ const CONFIG = {
     crearPedido:       '/api/ordenes/pedido',                           // POST -> PedidoInsertDTO
     mesa:              '/api/ordenes/pedido/mesa',                      // PUT  -> PedidoUpdateMesaDTO
     incidente:         '/api/ordenes/pedido/incidente',                 // PUT  -> PedidoUpdateIncidenteDTO
+    getIncidente:      id => `/api/ordenes/pedido/incidente/${id}`,     // GET  -> texto del incidente (String)
     metodoPago:        '/api/ordenes/pedido/metodoDePago',              // PUT  -> PedidoUpdateMetodoDePagoDTO
     agregarProductos:  id => `/api/ordenes/pedido/productos/add/${id}`,    // PUT -> [Detalle_producto]  (devuelve Pedido)
     quitarProductos:   id => `/api/ordenes/pedido/productos/remove/${id}`, // PUT -> [Long]              (devuelve Pedido)
@@ -187,6 +188,22 @@ const dinero = n => n == null ? 'Sin calcular' : '$' + Number(n).toLocaleString(
    Se lee del JSON del pedido; conIncidente recuerda los pedidos que ya lo tienen
    (registrado aquí o detectado por el error de clave duplicada). */
 const conIncidente = new Set();
+let incidenteActual = null;   // { existe, texto } | { error: true } | null (sin consultar)
+
+// GET /pedido/incidente/{id} devuelve el texto del incidente; vacío, "null" o 404/204 = no hay
+async function traerIncidente(id) {
+  const r = await fetch(CONFIG.API + CONFIG.rutas.getIncidente(id), { headers: { 'Authorization': AUTH_HEADER } });
+  if (r.status === 404 || r.status === 204) return { existe: false, texto: '' };
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const t = (await r.text()).trim();
+  const vacio = !t || t === 'null';
+  return { existe: !vacio, texto: vacio ? '' : t };
+}
+async function refrescarIncidente(id) {
+  if (demo) { incidenteActual = null; return; }
+  try { incidenteActual = await traerIncidente(id); }
+  catch (e) { console.warn('No se pudo consultar el incidente', e); incidenteActual = { error: true }; }
+}
 const incidenteDe = p => { const r = p?.incidente ?? p?.incidentes ?? null; return Array.isArray(r) ? (r[0] ?? null) : r; };
 const tieneIncidente = p => { const i = incidenteDe(p); return (i != null && i !== '') || conIncidente.has(p?.id_pedido); };
 const textoIncidente = i => {
@@ -265,6 +282,7 @@ async function verPedido(id) {
   catch (e) { console.error(e); return toast('No se pudo cargar el pedido ' + id, 'danger'); }
   if (!actual) return toast('No se encontró el pedido ' + id, 'danger');
   await cargarCatalogo();
+  await refrescarIncidente(id);
   pintarPedido();
   abrir('mPedido');
 }
@@ -296,13 +314,16 @@ function pintarPedido() {
   $('mesaPedido').value = actual.mesa?.id ?? '';
   $('metodo').innerHTML = CONFIG.metodos.map(m =>
     `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
-  const bloqueado = tieneIncidente(actual);
-  $('incidente').value = textoIncidente(incidenteDe(actual));
+  // El incidente se consulta al endpoint; si no se pudo, se usa el JSON del pedido como respaldo
+  const bloqueado = !!incidenteActual?.existe || tieneIncidente(actual);
+  $('incidente').value = incidenteActual?.texto || textoIncidente(incidenteDe(actual));
   $('incidente').disabled = bloqueado;
   $('incidente').placeholder = bloqueado ? 'Este pedido ya tiene un incidente registrado' : 'Describe el incidente';
   $('hintIncidente').textContent = bloqueado
     ? 'Este pedido ya tiene un incidente: no se puede editar ni añadir otro.'
-    : 'Solo se puede registrar un incidente por pedido; después no podrá editarse.';
+    : incidenteActual?.error
+      ? 'No se pudo consultar el incidente. Solo se admite uno por pedido; si ya existe, el servidor rechazará añadir otro.'
+      : 'Solo se puede registrar un incidente por pedido; después no podrá editarse.';
   pintarProductos();
   // selector de producto: del catálogo si cargó, si no, por id
   const selector = catalogo && catalogo.length
@@ -379,7 +400,7 @@ async function guardarPedido() {
   }
 
   try { actual = await api(CONFIG.rutas.pedido(id)); } catch (e) { console.error(e); }  // estado real tras guardar
-  if (fallos.length) { pintarPedido(); toast('No se pudo guardar: ' + fallos.join(', '), 'danger'); }
+  if (fallos.length) { await refrescarIncidente(id); pintarPedido(); toast('No se pudo guardar: ' + fallos.join(', '), 'danger'); }
   else { cerrar('mPedido'); toast('Pedido actualizado', 'success'); }
   cargarTodo();
 }
