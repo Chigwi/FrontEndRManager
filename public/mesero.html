@@ -217,7 +217,14 @@ const textoIncidente = i => {
 };
 
 // Productos del pedido: el nombre del campo depende de la entidad Pedido
-const productosDe = p => { const l = p?.productos ?? p?.detalle_productos ?? p?.detalleProductos ?? p?.detalles ?? []; return Array.isArray(l) ? l : []; };
+// Busca la lista de detalles en el pedido: primero por nombres habituales y, si no, cualquier arreglo que parezca Detalle_producto
+const pareceDetalle = x => x && typeof x === 'object' && ('producto' in x || 'id_detalle_producto' in x);
+const productosDe = p => {
+  if (!p) return [];
+  for (const k of ['productos', 'detalle_productos', 'detalleProductos', 'detalles'])
+    if (Array.isArray(p[k])) return p[k];
+  return Object.values(p).find(v => Array.isArray(v) && v.length && pareceDetalle(v[0])) ?? [];
+};
 // Sirve para un Detalle_producto ({ producto: {...} }) y para un Producto del catálogo
 const idProd     = x => x?.producto?.id_producto ?? x?.id_producto ?? x?.id;
 const idDetalle  = x => x?.id_detalle_producto;   // PedidoService.removeProductosFromPedido recibe ids de detalle
@@ -286,6 +293,7 @@ async function verPedido(id) {
   try { actual = demo ? pedidos.find(p => p.id_pedido === id) : await api(CONFIG.rutas.pedido(id)); }
   catch (e) { console.error(e); return toast('No se pudo cargar el pedido ' + id, 'danger'); }
   if (!actual) return toast('No se encontró el pedido ' + id, 'danger');
+  console.log('Pedido recibido:', actual);   // revisar aquí cómo llegan los productos
   await cargarCatalogo();
   await refrescarIncidente(id);
   pintarPedido();
@@ -311,7 +319,9 @@ function pintarProductos() {
       <div class="prod__info"><div>${esc(nomProd(x))}</div><div class="prod__sub">${cant}</div></div>
       <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Eliminar</button>
     </div>`;
-  }).join('') : '<div class="text-muted">Este pedido aún no tiene productos.</div>';
+  }).join('') : (Number(actual.precio_total) > 0
+      ? '<div class="text-muted">El pedido tiene un total, pero el servidor no devolvió la lista de productos (revisa la consola, F12).</div>'
+      : '<div class="text-muted">Este pedido aún no tiene productos.</div>');
 }
 
 function pintarPedido() {
