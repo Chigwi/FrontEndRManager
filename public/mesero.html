@@ -22,7 +22,6 @@
   .prod__sub { font-size:.82rem; color:var(--gray-500); }
   .prod-add { display:flex; gap:.5rem; align-items:center; margin-top:.75rem; }
   .prod-add .input, .prod-add .select { flex:1; min-width:0; }
-  .prod-add .cant { flex:0 0 80px; }
   @media (max-width:560px){ .main--full{ padding:1.25rem; } .prod-add{ flex-wrap:wrap; } }
 </style>
 </head>
@@ -131,7 +130,8 @@ const CONFIG = {
     quitarProductos:   id => `/api/ordenes/pedido/productos/remove/${id}`, // PUT -> [Long]              (devuelve Pedido)
     catalogo:          '/api/menu/productos'                            // GET  -> [{id, nombre}]  (AJUSTAR a tu ruta real del menú)
   },
-  metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }]
+  // ids según PedidoService.updateMetodoDePago: 1 Efectivo, 2 Tarjeta, 3 BREB
+  metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }, { id: 3, nombre: 'Bre-B' }]
 };
 
 /* Cuerpos de cada petición. Si el backend usa otros nombres de campo, se cambian SOLO aquí. */
@@ -140,7 +140,8 @@ const DTO = {
   mesa:        (idPedido, idMesa) => ({ id: idPedido, idmesa: idMesa }),  // PedidoUpdateMesaDTO (supuesto)
   incidente:   (id, incidente)      => ({ id, incidente }),               // según la guía
   metodoPago:  (idPedido, idMetodo) => ({ idPedido, idMetodo }),          // según la guía
-  detalle:     (idProducto, cantidad) => ({ id_producto: idProducto, cantidad }) // Detalle_producto (supuesto)
+  // Detalle_producto { id_detalle_producto, producto, notas, pedido }: el producto va anidado; no hay campo cantidad
+  detalle:     (idProducto, notas)  => ({ producto: { id_producto: idProducto }, notas: notas || null })
 };
 
 /* ================= DATOS DEMO ================= */
@@ -216,9 +217,13 @@ const textoIncidente = i => {
 };
 
 // Productos del pedido: el nombre del campo depende de la entidad Pedido
-const productosDe = p => { const l = p?.productos ?? p?.detalles ?? p?.detalle_productos ?? p?.detalleProductos ?? []; return Array.isArray(l) ? l : []; };
-const idProd  = x => x?.id ?? x?.id_detalle ?? x?.id_producto ?? x?.producto?.id ?? x?.producto?.id_producto;
-const nomProd = x => x?.nombre ?? x?.producto?.nombre ?? ('Producto ' + idProd(x));
+const productosDe = p => { const l = p?.productos ?? p?.detalle_productos ?? p?.detalleProductos ?? p?.detalles ?? []; return Array.isArray(l) ? l : []; };
+// Sirve para un Detalle_producto ({ producto: {...} }) y para un Producto del catálogo
+const idProd     = x => x?.producto?.id_producto ?? x?.id_producto ?? x?.id;
+const idDetalle  = x => x?.id_detalle_producto;   // PedidoService.removeProductosFromPedido recibe ids de detalle
+const nomProd    = x => x?.producto?.nombre ?? x?.nombre ?? ('Producto ' + idProd(x));
+const precioProd = x => x?.producto?.precio ?? x?.precio;
+const norm       = t => String(t ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');   // compara nombres sin depender de mayúsculas/guiones
 
 /* ================= CARGA ================= */
 async function cargarTodo() {
@@ -300,8 +305,8 @@ function pintarDetalle() {
 function pintarProductos() {
   const lista = productosDe(actual);
   $('productos').innerHTML = lista.length ? lista.map(x => {
-    const id = idProd(x);
-    const cant = x.cantidad != null ? `Cantidad: ${esc(x.cantidad)}` : '';
+    const id = idDetalle(x);
+    const cant = [precioProd(x) != null ? esc(dinero(precioProd(x))) : '', x.notas ? `Notas: ${esc(x.notas)}` : ''].filter(Boolean).join(' · ');
     return `<div class="prod">
       <div class="prod__info"><div>${esc(nomProd(x))}</div><div class="prod__sub">${cant}</div></div>
       <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Quitar</button>
@@ -313,7 +318,7 @@ function pintarPedido() {
   pintarDetalle();
   $('mesaPedido').value = actual.mesa?.id ?? '';
   $('metodo').innerHTML = CONFIG.metodos.map(m =>
-    `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
+    `<option value="${m.id}" ${norm(m.nombre) === norm(actual.metodo_de_pago) ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
   // El incidente se consulta al endpoint; si no se pudo, se usa el JSON del pedido como respaldo
   const bloqueado = !!incidenteActual?.existe || tieneIncidente(actual);
   $('incidente').value = incidenteActual?.texto || textoIncidente(incidenteDe(actual));
@@ -327,10 +332,10 @@ function pintarPedido() {
   pintarProductos();
   // selector de producto: del catálogo si cargó, si no, por id
   const selector = catalogo && catalogo.length
-    ? `<select class="select" id="prodSel">${catalogo.map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}</option>`).join('')}</select>`
+    ? `<select class="select" id="prodSel">${catalogo.map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}${precioProd(c) != null ? ' · ' + esc(dinero(precioProd(c))) : ''}</option>`).join('')}</select>`
     : `<input class="input" id="prodSel" type="number" min="1" placeholder="ID del producto">`;
   $('addProd').innerHTML = `${selector}
-    <input class="input cant" id="prodCant" type="number" min="1" value="1" aria-label="Cantidad">
+    <input class="input" id="prodNotas" type="text" maxlength="200" placeholder="Notas (opcional)" aria-label="Notas">
     <button class="btn btn--dark btn--sm" onclick="agregarProducto()">Añadir</button>`;
 }
 
@@ -355,10 +360,10 @@ async function aplicarProductos(promesa, okMsg) {
   } catch (e) { console.error(e); toast('No se pudo actualizar los productos', 'danger'); }
 }
 function agregarProducto() {
-  const idProducto = Number($('prodSel').value), cantidad = Number($('prodCant').value) || 1;
+  const idProducto = Number($('prodSel').value), notas = $('prodNotas').value.trim();
   if (!idProducto) return toast('Elige un producto', 'danger');
   aplicarProductos(
-    demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.detalle(idProducto, cantidad)]),
+    demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.detalle(idProducto, notas)]),
     'Producto añadido');
 }
 function quitarProducto(idProducto) {
@@ -376,7 +381,7 @@ async function guardarPedido() {
   if (mesaNueva && mesaNueva !== actual.mesa?.id) tareas.push(['mesa', () => actualizarMesa(id, mesaNueva)]);
 
   const metodoSel = CONFIG.metodos.find(m => m.id === Number($('metodo').value));
-  if (metodoSel && metodoSel.nombre !== actual.metodo_de_pago) tareas.push(['método de pago', () => actualizarMetodoPago(id, metodoSel.id)]);
+  if (metodoSel && norm(metodoSel.nombre) !== norm(actual.metodo_de_pago)) tareas.push(['método de pago', () => actualizarMetodoPago(id, metodoSel.id)]);
 
   // Solo se permite añadir un incidente si el pedido no tiene ninguno
   const texto = $('incidente').value.trim();
@@ -395,7 +400,7 @@ async function guardarPedido() {
       console.error(nombre, e);
       // 500 al añadir incidente = clave duplicada: el pedido ya tenía uno
       if (nombre === 'incidente' && e.status === 500) { conIncidente.add(id); fallos.push('incidente (el pedido ya tiene uno)'); }
-      else fallos.push(nombre);
+      else fallos.push(nombre === 'mesa' && e.status === 500 ? 'mesa (¿la nueva mesa ya está ocupada?)' : nombre);
     }
   }
 
@@ -413,7 +418,7 @@ async function crearPedido() {
   try {
     if (!demo) await api(CONFIG.rutas.crearPedido, 'POST', DTO.crearPedido(mesaId, CONFIG.MESERO_ID));
     cerrar('mNuevo'); toast('Pedido creado', 'success'); cargarTodo();
-  } catch (e) { console.error(e); toast('No se pudo crear el pedido', 'danger'); }
+  } catch (e) { console.error(e); toast(e.status === 500 ? 'No se pudo crear el pedido (¿la mesa ya está ocupada?)' : 'No se pudo crear el pedido', 'danger'); }
 }
 
 cargarTodo();
