@@ -75,6 +75,7 @@
       <div class="field">
         <label class="label" for="incidente">Incidente</label>
         <textarea class="textarea" id="incidente" placeholder="Describe cualquier incidente con el pedido"></textarea>
+        <div class="field__hint" id="hintIncidente"></div>
       </div>
       <div class="field__hint">Mesa, método de pago e incidente se guardan con «Guardar cambios».</div>
 
@@ -174,7 +175,7 @@ async function api(ruta, metodo = 'GET', cuerpo) {
   const r = await fetch(CONFIG.API + ruta, {
     method: metodo, headers, body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined
   });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) { const err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
   const txt = await r.text();
   try { return txt ? JSON.parse(txt) : null; } catch { return txt; }  // algunos endpoints devuelven texto plano
 }
@@ -182,8 +183,20 @@ const claseEstado = e => ({ pendiente:'badge--warning', preparando:'badge--gold'
 const fecha = f => f ? new Date(f).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const dinero = n => n == null ? 'Sin calcular' : '$' + Number(n).toLocaleString('es-CO');
 
-// El incidente puede venir como texto o como objeto (entidad Incidente)
-const textoIncidente = i => i == null ? '' : typeof i === 'object' ? (i.descripcion ?? i.incidente ?? i.detalle ?? '') : String(i);
+/* Incidente: el backend solo admite UNO por pedido y no permite editarlo.
+   Se lee del JSON del pedido; conIncidente recuerda los pedidos que ya lo tienen
+   (registrado aquí o detectado por el error de clave duplicada). */
+const conIncidente = new Set();
+const incidenteDe = p => { const r = p?.incidente ?? p?.incidentes ?? null; return Array.isArray(r) ? (r[0] ?? null) : r; };
+const tieneIncidente = p => { const i = incidenteDe(p); return (i != null && i !== '') || conIncidente.has(p?.id_pedido); };
+const textoIncidente = i => {
+  if (i == null) return '';
+  if (typeof i !== 'object') return String(i);
+  const conocido = i.descripcion ?? i.incidente ?? i.detalle ?? i.texto ?? i.mensaje;
+  if (conocido != null) return String(conocido);
+  const primero = Object.entries(i).find(([k, v]) => typeof v === 'string' && !/fecha|date|id/i.test(k));
+  return primero ? primero[1] : '';
+};
 
 // Productos del pedido: el nombre del campo depende de la entidad Pedido
 const productosDe = p => { const l = p?.productos ?? p?.detalles ?? p?.detalle_productos ?? p?.detalleProductos ?? []; return Array.isArray(l) ? l : []; };
@@ -283,7 +296,13 @@ function pintarPedido() {
   $('mesaPedido').value = actual.mesa?.id ?? '';
   $('metodo').innerHTML = CONFIG.metodos.map(m =>
     `<option value="${m.id}" ${m.nombre === actual.metodo_de_pago ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('');
-  $('incidente').value = textoIncidente(actual.incidente);
+  const bloqueado = tieneIncidente(actual);
+  $('incidente').value = textoIncidente(incidenteDe(actual));
+  $('incidente').disabled = bloqueado;
+  $('incidente').placeholder = bloqueado ? 'Este pedido ya tiene un incidente registrado' : 'Describe el incidente';
+  $('hintIncidente').textContent = bloqueado
+    ? 'Este pedido ya tiene un incidente: no se puede editar ni añadir otro.'
+    : 'Solo se puede registrar un incidente por pedido; después no podrá editarse.';
   pintarProductos();
   // selector de producto: del catálogo si cargó, si no, por id
   const selector = catalogo && catalogo.length
@@ -327,26 +346,37 @@ function quitarProducto(idProducto) {
     'Producto quitado');
 }
 
-// Mesa, método de pago e incidente: solo se envía lo que cambió, cada uno a su endpoint
+// Mesa, método de pago e incidente: solo se envía lo que cambió, cada uno a su endpoint y en orden
 async function guardarPedido() {
   const id = actual.id_pedido;
   const tareas = [];
 
   const mesaNueva = Number($('mesaPedido').value);
-  if (mesaNueva && mesaNueva !== actual.mesa?.id) tareas.push(['mesa', actualizarMesa(id, mesaNueva)]);
+  if (mesaNueva && mesaNueva !== actual.mesa?.id) tareas.push(['mesa', () => actualizarMesa(id, mesaNueva)]);
 
   const metodoSel = CONFIG.metodos.find(m => m.id === Number($('metodo').value));
-  if (metodoSel && metodoSel.nombre !== actual.metodo_de_pago) tareas.push(['método de pago', actualizarMetodoPago(id, metodoSel.id)]);
+  if (metodoSel && metodoSel.nombre !== actual.metodo_de_pago) tareas.push(['método de pago', () => actualizarMetodoPago(id, metodoSel.id)]);
 
+  // Solo se permite añadir un incidente si el pedido no tiene ninguno
   const texto = $('incidente').value.trim();
-  if (texto !== textoIncidente(actual.incidente).trim()) tareas.push(['incidente', actualizarIncidente(id, texto)]);
+  if (!$('incidente').disabled && texto) {
+    if (!confirm('Solo se puede registrar un incidente por pedido y después no podrá editarse. ¿Registrarlo?')) return;
+    tareas.push(['incidente', async () => { await actualizarIncidente(id, texto); conIncidente.add(id); }]);
+  }
 
   if (!tareas.length) return toast('No hay cambios que guardar');
   if (demo) { cerrar('mPedido'); return toast('Modo demo: no se envió nada'); }
 
-  const res = await Promise.allSettled(tareas.map(t => t[1]));
-  res.forEach(r => r.status === 'rejected' && console.error(r.reason));
-  const fallos = res.map((r, i) => r.status === 'rejected' ? tareas[i][0] : null).filter(Boolean);
+  const fallos = [];
+  for (const [nombre, enviar] of tareas) {
+    try { await enviar(); }
+    catch (e) {
+      console.error(nombre, e);
+      // 500 al añadir incidente = clave duplicada: el pedido ya tenía uno
+      if (nombre === 'incidente' && e.status === 500) { conIncidente.add(id); fallos.push('incidente (el pedido ya tiene uno)'); }
+      else fallos.push(nombre);
+    }
+  }
 
   try { actual = await api(CONFIG.rutas.pedido(id)); } catch (e) { console.error(e); }  // estado real tras guardar
   if (fallos.length) { pintarPedido(); toast('No se pudo guardar: ' + fallos.join(', '), 'danger'); }
