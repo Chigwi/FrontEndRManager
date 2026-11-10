@@ -64,11 +64,31 @@
 .modal__icon { width: 48px; height: 48px; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--danger-bg); color: var(--danger); }
 .modal__icon svg { width: 24px; height: 24px; }
 
+/* ---------- Pedido: cantidad, lista y botón del navbar ---------- */
+.qty { display: inline-flex; align-items: center; border: 1px solid var(--gray-300); border-radius: var(--radius); background: var(--white); }
+.qty button { width: 34px; height: 34px; border: 0; background: none; font: inherit; font-size: 1.1rem; line-height: 1; color: var(--gray-700); cursor: pointer; border-radius: var(--radius); }
+.qty button:hover:not(:disabled) { background: var(--gray-100); color: var(--black); }
+.qty button:disabled { opacity: .4; cursor: not-allowed; }
+.qty output { min-width: 34px; text-align: center; font-weight: 600; }
+.detail__qty { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--gray-200); }
+.btn-pedido .badge { margin-left: .15rem; }
+.pedido-list { list-style: none; margin: 0 0 .5rem; padding: 0; }
+.pedido-row { display: grid; grid-template-columns: 1fr auto; gap: .35rem 1rem; align-items: center; padding: .8rem 0; border-bottom: 1px solid var(--gray-200); }
+.pedido-row__name { font-weight: 600; color: var(--black); }
+.pedido-row__sub { font-size: .85rem; color: var(--gray-500); }
+.pedido-row__side { display: flex; align-items: center; gap: .75rem; }
+.pedido-row__total { font-weight: 700; min-width: 64px; text-align: right; }
+.pedido-remove { background: none; border: 0; padding: .2rem .4rem; font: inherit; font-size: .85rem; color: var(--danger); cursor: pointer; border-radius: var(--radius); }
+.pedido-remove:hover { background: var(--danger-bg); }
+.pedido-total { display: flex; justify-content: space-between; margin: 1rem 0 0; font-size: 1.15rem; font-weight: 700; color: var(--black); }
+
 @media (max-width: 700px) {
   .menu-filters__row { grid-template-columns: 1fr; }
   .menu-wrap { padding: 1.25rem 1rem 2rem; }
   .user-btn__text { display: none; }
   .user-btn { padding-right: .5rem; }
+  .pedido-row { grid-template-columns: 1fr; }
+  .pedido-row__side { justify-content: space-between; }
 }
 </style>
 </head>
@@ -78,6 +98,9 @@
   <ul class="navbar__links"><li><a class="is-active" href="menu.html">Menú</a></li></ul>
 
   <div class="navbar__actions">
+    <button class="btn btn--primary btn--sm btn-pedido" id="btnPedido" type="button" aria-label="Ver pedido actual">
+      Pedido <span class="badge badge--dark" id="pedidoCount">0</span>
+    </button>
     <div class="dropdown" id="userDropdown">
       <button class="user-btn" id="btnUsuario" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menú de usuario">
         <span class="avatar" id="uAvatar">?</span>
@@ -149,8 +172,42 @@
       <div class="detail__badges" id="dBadges"></div>
       <div id="dDesc" class="mb-2"></div>
       <div class="text-muted" id="dCat"></div>
+      <div class="detail__qty">
+        <span class="label" style="margin:0" id="dQtyLabel">Cantidad</span>
+        <div class="qty" role="group" aria-labelledby="dQtyLabel">
+          <button type="button" id="dMenos" aria-label="Quitar una unidad">&minus;</button>
+          <output id="dCant" aria-live="polite">1</output>
+          <button type="button" id="dMas" aria-label="Agregar una unidad">+</button>
+        </div>
+      </div>
     </div>
-    <div class="modal__footer"><button class="btn btn--dark" id="dOk">Cerrar</button></div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" id="dOk" type="button">Cerrar</button>
+      <button class="btn btn--primary" id="dAgregar" type="button" disabled>Agregar al pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pedido actual -->
+<div class="modal-backdrop" id="pedido">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pTitulo">
+    <div class="modal__header">
+      <h2 class="modal__title" id="pTitulo">Pedido actual</h2>
+      <button class="modal__close" id="pCerrar" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="modal__body">
+      <div class="field">
+        <label class="label" for="pId">N.º de pedido</label>
+        <input class="input" id="pId" type="number" min="1" step="1" inputmode="numeric" placeholder="Ej. 12">
+        <div class="field__hint">Los productos se agregarán a este pedido.</div>
+      </div>
+      <div id="pError"></div>
+      <div id="pContenido"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" id="pVaciar" type="button">Vaciar</button>
+      <button class="btn btn--primary" id="pEnviar" type="button">Agregar al pedido</button>
+    </div>
   </div>
 </div>
 
@@ -171,10 +228,13 @@
   </div>
 </div>
 
+<div class="toast-stack" id="toasts" aria-live="polite"></div>
+
 <script>
 // URLs del backend (completar con las reales).
 const API_URL = 'http://localhost:8080/api/menu';                    // todos los productos; el detalle es API_URL + '/' + id
 const API_MENU_DIA = 'http://localhost:8080/api/menu/menu_del_dia';  // solo el menú del día
+const API_PEDIDO_ADD = 'http://localhost:8080/api/ordenes/pedido/productos/add'; // PUT + '/' + idPedido (ajusta el prefijo si tu controlador es distinto)
 const AUTH = { headers: { 'Authorization': 'Basic ' + btoa('1000034908:Chigwi23') } };
 const $ = id => document.getElementById(id);
 const moneda = n => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(n);
@@ -393,8 +453,17 @@ function badge(texto, clase) {
 }
 
 let tokenDetalle = 0;
+let productoDetalle = null;   // producto ya cargado desde el backend (null mientras carga)
+let cantidadDetalle = 1;
+
+function pintarCantidad() {
+  $('dCant').textContent = cantidadDetalle;
+  $('dMenos').disabled = cantidadDetalle <= 1;
+  $('dMas').disabled = cantidadDetalle >= 99;
+}
 
 function pintarDetalle(d) {
+  productoDetalle = d;
   $('dNombre').textContent = d.nombre;
   $('dPrecio').textContent = moneda(d.precio);
   $('dDesc').textContent = d.descripcion;
@@ -402,11 +471,14 @@ function pintarDetalle(d) {
   const bd = $('dBadges'); bd.innerHTML = '';
   bd.appendChild(d.disponible ? badge('Disponible', 'badge--success') : badge('Agotado', 'badge--danger'));
   if (d.es_menu_del_dia) bd.appendChild(badge('Menú del día', 'badge--gold'));
+  $('dAgregar').disabled = !d.disponible;   // no se puede pedir un producto agotado
 }
 
 async function abrir(p, origen) {
   ultimoFoco = origen;
   const token = ++tokenDetalle;
+  productoDetalle = null; cantidadDetalle = 1; pintarCantidad();
+  $('dAgregar').disabled = true;
   // Se muestra de inmediato lo que ya se conoce y un esqueleto mientras llega el detalle
   $('dNombre').textContent = p.nombre;
   $('dPrecio').textContent = moneda(p.precio);
@@ -433,15 +505,162 @@ function cerrar() {
   if (ultimoFoco) ultimoFoco.focus();
 }
 
+
+// ---- Pedido: carrito local y envío al backend ----
+const carrito = new Map();   // id_producto -> { id_producto, nombre, precio, cantidad }
+
+// Cada línea del pedido se envía como un ItemRequestDTO: { idProducto, cantidad, notas }.
+function armarItem(item) {
+  return {
+    idProducto: item.id_producto,
+    cantidad: item.cantidad
+    // notas: '...'   // opcional
+  };
+}
+
+function toast(mensaje, tipo) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (tipo ? ' toast--' + tipo : '');
+  t.textContent = mensaje;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+const totalUnidades = () => [...carrito.values()].reduce((s, i) => s + i.cantidad, 0);
+const totalPrecio = () => [...carrito.values()].reduce((s, i) => s + i.cantidad * i.precio, 0);
+
+function actualizarContador() {
+  const n = totalUnidades();
+  $('pedidoCount').textContent = n;
+  $('btnPedido').setAttribute('aria-label', 'Ver pedido actual, ' + n + (n === 1 ? ' unidad' : ' unidades'));
+}
+
+function agregarAlPedido() {
+  const d = productoDetalle;
+  if (!d || !d.disponible) return;
+  const previo = carrito.get(d.id_producto);
+  const cantidad = Math.min(99, (previo ? previo.cantidad : 0) + cantidadDetalle);
+  carrito.set(d.id_producto, { id_producto: d.id_producto, nombre: d.nombre, precio: d.precio, cantidad });
+  actualizarContador();
+  toast(cantidadDetalle + ' × ' + d.nombre + ' agregado al pedido');
+  cerrar();
+}
+
+function pintarPedido() {
+  const cont = $('pContenido');
+  const items = [...carrito.values()];
+  $('pEnviar').disabled = !items.length;
+  $('pVaciar').disabled = !items.length;
+  if (!items.length) {
+    cont.innerHTML = '<div class="empty text-muted">Aún no has agregado productos.<br>Abre un producto del menú y pulsa «Agregar al pedido».</div>';
+    return;
+  }
+  const ul = document.createElement('ul');
+  ul.className = 'pedido-list';
+  items.forEach(i => {
+    const li = document.createElement('li'); li.className = 'pedido-row';
+    const info = document.createElement('div');
+    const n = document.createElement('div'); n.className = 'pedido-row__name'; n.textContent = i.nombre;
+    const s = document.createElement('div'); s.className = 'pedido-row__sub'; s.textContent = moneda(i.precio) + ' c/u';
+    info.append(n, s);
+
+    const side = document.createElement('div'); side.className = 'pedido-row__side';
+    const qty = document.createElement('div'); qty.className = 'qty'; qty.setAttribute('role', 'group'); qty.setAttribute('aria-label', 'Cantidad de ' + i.nombre);
+    const menos = document.createElement('button'); menos.type = 'button'; menos.innerHTML = '&minus;'; menos.setAttribute('aria-label', 'Quitar una unidad de ' + i.nombre); menos.disabled = i.cantidad <= 1;
+    const out = document.createElement('output'); out.textContent = i.cantidad;
+    const mas = document.createElement('button'); mas.type = 'button'; mas.textContent = '+'; mas.setAttribute('aria-label', 'Agregar una unidad de ' + i.nombre); mas.disabled = i.cantidad >= 99;
+    menos.addEventListener('click', () => { i.cantidad--; actualizarContador(); pintarPedido(); });
+    mas.addEventListener('click', () => { i.cantidad++; actualizarContador(); pintarPedido(); });
+    qty.append(menos, out, mas);
+
+    const tot = document.createElement('div'); tot.className = 'pedido-row__total'; tot.textContent = moneda(i.precio * i.cantidad);
+    const quitar = document.createElement('button'); quitar.type = 'button'; quitar.className = 'pedido-remove'; quitar.textContent = 'Quitar';
+    quitar.setAttribute('aria-label', 'Quitar ' + i.nombre + ' del pedido');
+    quitar.addEventListener('click', () => { carrito.delete(i.id_producto); actualizarContador(); pintarPedido(); });
+    side.append(qty, tot, quitar);
+
+    li.append(info, side);
+    ul.appendChild(li);
+  });
+  const total = document.createElement('div'); total.className = 'pedido-total';
+  total.innerHTML = '<span>Total</span><span></span>';
+  total.lastChild.textContent = moneda(totalPrecio());
+  cont.innerHTML = '';
+  cont.append(ul, total);
+}
+
+function abrirPedido() {
+  $('pError').innerHTML = '';
+  try { if (!$('pId').value) $('pId').value = sessionStorage.getItem('pedidoId') || ''; } catch (e) {}
+  pintarPedido();
+  $('pedido').classList.add('is-open');
+  ($('pId').value ? $('pCerrar') : $('pId')).focus();
+}
+function cerrarPedido() {
+  $('pedido').classList.remove('is-open');
+  $('btnPedido').focus();
+}
+
+async function enviarPedido() {
+  const id = Number($('pId').value);
+  if (!Number.isInteger(id) || id < 1) {
+    $('pError').innerHTML = '<div class="alert alert--warning" role="alert">Escribe el número del pedido al que quieres agregar los productos.</div>';
+    $('pId').focus();
+    return;
+  }
+  if (!carrito.size) return;
+  $('pError').innerHTML = '';
+  $('pEnviar').disabled = true; $('pEnviar').textContent = 'Enviando…';
+  try {
+    const r = await fetch(API_PEDIDO_ADD + '/' + id, {
+      method: 'PUT',
+      headers: { ...AUTH.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify([...carrito.values()].map(armarItem))
+    });
+    if (!r.ok) {
+      const texto = await r.text().catch(() => '');
+      console.error('PUT ' + r.url + ' falló con ' + r.status, texto);
+      let extra = '';
+      try { const j = JSON.parse(texto); extra = j.message || j.error || ''; } catch (e) { extra = texto.slice(0, 200); }
+      const msg = r.status === 404 ? 'El servidor respondió 404: no se encontró el pedido ' + id + ' o la ruta ' + r.url + '.'
+        : (r.status === 401 || r.status === 403) ? 'No tienes permiso para modificar este pedido (código ' + r.status + ').'
+        : 'El servidor respondió con error ' + r.status + (extra ? ': ' + extra : '') + '.';
+      throw new Error(msg);
+    }
+    try { sessionStorage.setItem('pedidoId', String(id)); } catch (e) {}
+    const unidades = totalUnidades();
+    carrito.clear();
+    actualizarContador();
+    cerrarPedido();
+    toast(unidades + (unidades === 1 ? ' producto agregado' : ' productos agregados') + ' al pedido #' + id, 'success');
+  } catch (e) {
+    const msg = e instanceof TypeError ? 'No se pudo conectar con el servidor. Revisa tu conexión.' : e.message;
+    $('pError').innerHTML = '<div class="alert alert--danger" role="alert"></div>';
+    $('pError').firstChild.textContent = msg;
+  } finally {
+    $('pEnviar').textContent = 'Agregar al pedido';
+    pintarPedido();
+  }
+}
+
 $('buscar').addEventListener('input', pintarLista);
 $('orden').addEventListener('change', pintarLista);
 $('btnDia').addEventListener('click', alternarMenuDia);
 $('dCerrar').addEventListener('click', cerrar);
 $('dOk').addEventListener('click', cerrar);
 $('detalle').addEventListener('click', e => { if (e.target === $('detalle')) cerrar(); });
+$('dMenos').addEventListener('click', () => { if (cantidadDetalle > 1) { cantidadDetalle--; pintarCantidad(); } });
+$('dMas').addEventListener('click', () => { if (cantidadDetalle < 99) { cantidadDetalle++; pintarCantidad(); } });
+$('dAgregar').addEventListener('click', agregarAlPedido);
+$('btnPedido').addEventListener('click', abrirPedido);
+$('pCerrar').addEventListener('click', cerrarPedido);
+$('pVaciar').addEventListener('click', () => { carrito.clear(); actualizarContador(); pintarPedido(); });
+$('pEnviar').addEventListener('click', enviarPedido);
+$('pedido').addEventListener('click', e => { if (e.target === $('pedido')) cerrarPedido(); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if ($('salir').classList.contains('is-open')) cancelarSalir();
+  else if ($('pedido').classList.contains('is-open')) cerrarPedido();
   else if ($('detalle').classList.contains('is-open')) cerrar();
   else menuUsuario(false);
 });
@@ -449,6 +668,7 @@ document.addEventListener('keydown', e => {
 // Solo carga datos si hay sesión (si no, Auth.require() ya redirigió al login)
 if (Auth.isLoggedIn()) {
   pintarUsuario();
+  actualizarContador();
   cargar();
 }
 </script>
