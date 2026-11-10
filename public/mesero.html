@@ -346,12 +346,22 @@ function pintarPedido() {
       ? 'No se pudo consultar el incidente. Solo se admite uno por pedido; si ya existe, el servidor rechazará añadir otro.'
       : 'Solo se puede registrar un incidente por pedido; después no podrá editarse.';
   pintarProductos();
-  // selector por nombre (catálogo de GET /api/menu); si no cargó, se pide el id
-  const selector = catalogo && catalogo.length
-    ? `<select class="select" id="prodSel"><option value="">Selecciona un producto…</option>${
-        [...catalogo].sort((a, b) => String(nomProd(a)).localeCompare(String(nomProd(b)), 'es'))
-          .map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}${precioProd(c) != null ? ' · ' + esc(dinero(precioProd(c))) : ''}</option>`).join('')}</select>`
-    : `<input class="input" id="prodSel" type="number" min="1" placeholder="ID del producto">`;
+  // selector por nombre (catálogo de GET /api/menu): agrupado por categoría y con los no disponibles deshabilitados
+  const opcion = c => `<option value="${esc(idProd(c))}" ${c.disponible === false ? 'disabled' : ''}>${esc(nomProd(c))}${precioProd(c) != null ? ' · ' + esc(dinero(precioProd(c))) : ''}${c.disponible === false ? ' (no disponible)' : ''}</option>`;
+  const grupoDe = c => c?.categoria?.nombre ?? null;
+  let selector;
+  if (catalogo && catalogo.length) {
+    const orden = [...catalogo].sort((x, y) => String(nomProd(x)).localeCompare(String(nomProd(y)), 'es'));
+    let opciones;
+    if (orden.some(grupoDe)) {
+      const grupos = new Map();
+      orden.forEach(c => { const g = grupoDe(c) ?? 'Otros'; if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(c); });
+      opciones = [...grupos].map(([g, l]) => `<optgroup label="${esc(g)}">${l.map(opcion).join('')}</optgroup>`).join('');
+    } else opciones = orden.map(opcion).join('');
+    selector = `<select class="select" id="prodSel"><option value="">Selecciona un producto…</option>${opciones}</select>`;
+  } else {
+    selector = `<input class="input" id="prodSel" type="number" min="1" placeholder="ID del producto">`;
+  }
   $('addProd').innerHTML = `${selector}
     <input class="input cant" id="prodCant" type="number" min="1" step="1" value="1" aria-label="Cantidad">
     <input class="input" id="prodNotas" type="text" maxlength="200" placeholder="Notas (opcional)" aria-label="Notas">
