@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>R-manager · Vista de mesero</title>
-<link rel="stylesheet" href="mesero.css">
+<link rel="stylesheet" href="theme.css">
+<script src="auth.js"></script>
+<script>Auth.require(['mesero', 'admin']); // sin sesión vuelve a login.html; otros roles van a su pantalla</script>
 <style>
   .lista { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1.25rem; }
   .item { padding:1.1rem 1.25rem; }
@@ -31,10 +33,7 @@
 <body>
 <nav class="navbar">
   <a class="navbar__brand" href="#"><span>&#9670;</span> R-manager</a>
-  <div class="navbar__actions">
-    <span id="meseroNombre" class="text-muted"></span>
-    <span class="avatar" id="meseroAvatar">M</span>
-  </div>
+  <div class="navbar__actions"></div><!-- lo llena usermenu.js (usuario + cerrar sesión) -->
 </nav>
 
 <main class="main--full">
@@ -117,11 +116,18 @@
 
 <script>
 /* ================= CONFIGURACIÓN ================= */
-const TEST_USER = { cedula: '1000034908', clave: 'Chigwi23', idEmpleado: 3 };
-const AUTH_HEADER = 'Basic ' + btoa(TEST_USER.cedula + ':' + TEST_USER.clave);
+// Credenciales temporales de pruebas (las mismas del resto del proyecto). Si la sesión trae token se usa el token.
+// Quitar cuando el login entregue un token real.
+const AUTH_PRUEBA = 'Basic ' + btoa('1000034908:Chigwi23');
+const authHeader = () => { const t = Auth.token(); return t ? 'Bearer ' + t : AUTH_PRUEBA; };
+
+// El mesero es quien inició sesión (id guardado por login.html)
+const sesion = Auth.user() || {};
+const MESERO_ID = Number(sesion.id_empleado ?? sesion.idEmpleado ?? sesion.id) || null;
+
 const CONFIG = {
   API: 'http://localhost:8080',
-  MESERO_ID: Number(new URLSearchParams(location.search).get('mesero')) || TEST_USER.idEmpleado,
+  MESERO_ID,
   rutas: {
     mesasEmpleado:     id => `/api/ordenes/mesasEmpleado/${id}`,        // GET  -> [{nombreEmpleado, mesaId, estado}]
     pedidoPorEmpleado: id => `/api/ordenes/pedido/empleado/${id}`,      // GET  -> [Pedido]
@@ -178,7 +184,7 @@ function toast(msg, tipo) {
   setTimeout(() => t.remove(), 3500);
 }
 async function api(ruta, metodo = 'GET', cuerpo) {
-  const headers = { 'Authorization': AUTH_HEADER };
+  const headers = { 'Authorization': authHeader() };
   if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
   const r = await fetch(CONFIG.API + ruta, {
     method: metodo, headers, body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined
@@ -199,7 +205,7 @@ let incidenteActual = null;   // { existe, texto } | { error: true } | null (sin
 
 // GET /pedido/incidente/{id} devuelve el texto del incidente; vacío, "null" o 404/204 = no hay
 async function traerIncidente(id) {
-  const r = await fetch(CONFIG.API + CONFIG.rutas.getIncidente(id), { headers: { 'Authorization': AUTH_HEADER } });
+  const r = await fetch(CONFIG.API + CONFIG.rutas.getIncidente(id), { headers: { 'Authorization': authHeader() } });
   if (r.status === 404 || r.status === 204) return { existe: false, texto: '' };
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const t = (await r.text()).trim();
@@ -240,14 +246,26 @@ const norm       = t => String(t ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /* ================= CARGA ================= */
 async function cargarTodo() {
+  if (!CONFIG.MESERO_ID) {
+    pedidos = []; mesas = []; demo = false;
+    $('aviso').innerHTML = '<div class="alert alert--danger">No se pudo identificar al empleado. Cierra sesión e ingresa de nuevo.</div>';
+    pintar();
+    return;
+  }
   const [rp, rm] = await Promise.allSettled([
     api(CONFIG.rutas.pedidoPorEmpleado(CONFIG.MESERO_ID)),
     api(CONFIG.rutas.mesasEmpleado(CONFIG.MESERO_ID))
   ]);
   if (rp.status === 'rejected' && rm.status === 'rejected') {
     console.error(rp.reason, rm.reason);
-    demo = true; pedidos = DEMO.pedidos; mesas = DEMO.mesas;
-    $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>';
+    const sinPermiso = [rp.reason, rm.reason].some(r => r?.status === 401 || r?.status === 403);
+    if (sinPermiso) {
+      demo = false; pedidos = []; mesas = [];
+      $('aviso').innerHTML = '<div class="alert alert--danger">El servidor rechazó la petición (sin permiso). Revisa tu usuario o cierra sesión e ingresa de nuevo.</div>';
+    } else {
+      demo = true; pedidos = DEMO.pedidos; mesas = DEMO.mesas;
+      $('aviso').innerHTML = '<div class="alert alert--info">No se pudo conectar con la API. Mostrando datos de ejemplo.</div>';
+    }
   } else {
     demo = false; $('aviso').innerHTML = '';
     if (rp.status === 'rejected') { console.error(rp.reason); toast('No se pudieron cargar los pedidos', 'danger'); }
@@ -255,8 +273,6 @@ async function cargarTodo() {
     const aLista = v => v == null ? [] : Array.isArray(v) ? v : [v];
     pedidos = aLista(rp.value); mesas = aLista(rm.value);
   }
-  const nombre = pedidos[0]?.mesero?.nombre ?? mesas[0]?.nombreEmpleado;
-  if (nombre) { $('meseroNombre').textContent = nombre; $('meseroAvatar').textContent = nombre[0].toUpperCase(); }
   pintar();
 }
 
@@ -461,7 +477,9 @@ async function crearPedido() {
   } catch (e) { console.error(e); toast(e.status === 500 ? 'No se pudo crear el pedido (¿la mesa ya está ocupada?)' : 'No se pudo crear el pedido', 'danger'); }
 }
 
-cargarTodo();
+// Solo carga datos si hay sesión (si no, Auth.require() ya redirigió al login)
+if (Auth.isLoggedIn()) cargarTodo();
 </script>
+<script src="usermenu.js"></script>
 </body>
 </html>
