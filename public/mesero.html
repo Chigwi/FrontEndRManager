@@ -142,6 +142,9 @@ const CONFIG = {
     catalogo:          '/api/menu',                                     // GET  -> [Producto]
     productosPedido:   id => `/api/ordenes/pedido/productos/${id}`      // GET  -> [{ id_detalle_producto, cantidad, producto:{...}, notas }]  (en desarrollo en el backend)
   },
+  // Ids que se mandan a PUT /pedido/productos/remove/{id}: 'detalle' (id_detalle_producto; si la lista no lo trae, usa id_producto) o 'producto' (siempre id_producto).
+  // Si el backend espera el otro, cambiar solo esta línea.
+  quitarPor: 'detalle',
   // ids según PedidoService.updateMetodoDePago: 1 Efectivo, 2 Tarjeta, 3 BREB
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }, { id: 3, nombre: 'Bre-B' }]
 };
@@ -189,7 +192,11 @@ async function api(ruta, metodo = 'GET', cuerpo) {
   const r = await fetch(CONFIG.API + ruta, {
     method: metodo, headers, body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined
   });
-  if (!r.ok) { const err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
+  if (!r.ok) {
+    const err = new Error('HTTP ' + r.status); err.status = r.status;
+    try { err.cuerpo = (await r.text()).slice(0, 300); } catch {}
+    throw err;
+  }
   const txt = await r.text();
   try { return txt ? JSON.parse(txt) : null; } catch { return txt; }  // algunos endpoints devuelven texto plano
 }
@@ -203,14 +210,17 @@ const dinero = n => n == null ? 'Sin calcular' : '$' + Number(n).toLocaleString(
 const conIncidente = new Set();
 let incidenteActual = null;   // { existe, texto } | { error: true } | null (sin consultar)
 
-// GET /pedido/incidente/{id} devuelve el texto del incidente; vacío, "null" o 404/204 = no hay
+// GET /pedido/incidente/{id} devuelve un PedidoUpdateIncidenteDTO: si su campo "descripcion" es null
+// no hay incidente; si trae algo, ya existe uno. (404/204 o cuerpo vacío también significan que no hay.)
 async function traerIncidente(id) {
   const r = await fetch(CONFIG.API + CONFIG.rutas.getIncidente(id), { headers: { 'Authorization': authHeader() } });
   if (r.status === 404 || r.status === 204) return { existe: false, texto: '' };
   if (!r.ok) throw new Error('HTTP ' + r.status);
-  const t = (await r.text()).trim();
-  const vacio = !t || t === 'null';
-  return { existe: !vacio, texto: vacio ? '' : t };
+  const crudo = (await r.text()).trim();
+  let dato = null;
+  try { dato = crudo ? JSON.parse(crudo) : null; } catch { dato = crudo; }   // por si llegara texto plano
+  const descripcion = (dato && typeof dato === 'object') ? dato.descripcion : dato;
+  return descripcion == null ? { existe: false, texto: '' } : { existe: true, texto: String(descripcion) };
 }
 async function refrescarIncidente(id) {
   if (demo) { incidenteActual = null; return; }
@@ -238,10 +248,21 @@ const productosDe = p => {
   return Object.values(p).find(v => Array.isArray(v) && v.length && pareceDetalle(v[0])) ?? [];
 };
 // Sirve para un Detalle_producto ({ producto: {...} }) y para un Producto del catálogo
-const idProd     = x => x?.producto?.id_producto ?? x?.id_producto ?? x?.id;
-const idDetalle  = x => x?.id_detalle_producto;   // PedidoService.removeProductosFromPedido recibe ids de detalle
+const idProd     = x => x?.producto?.id_producto ?? x?.producto?.idProducto ?? x?.id_producto ?? x?.idProducto ?? x?.id;
+const idDetalle  = x => x?.idDetalle ?? x?.id_detalle_producto ?? x?.idDetalleProducto ?? x?.id_detalle ?? x?.id;
+// Id que se manda a /remove: el del detalle si la lista lo trae; si no, el del producto (así el botón no queda deshabilitado)
+// Último recurso: primer campo que parezca un id (id, id_xxx, idXxx) y no sea de pedido/mesa/empleado/categoría/estado
+const campoId = o => {
+  if (!o || typeof o !== 'object') return undefined;
+  const k = Object.keys(o).find(k => /^id([_A-Z]|$)/.test(k) && !/pedido|mesa|empleado|categoria|estado/i.test(k) && o[k] != null && typeof o[k] !== 'object');
+  const n = k ? Number(o[k]) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+};
+const idQuitar   = x => CONFIG.quitarPor === 'producto'
+  ? (idProd(x) ?? campoId(x?.producto) ?? campoId(x))
+  : (idDetalle(x) ?? idProd(x) ?? campoId(x) ?? campoId(x?.producto));   // PedidoService.removeProductosFromPedido recibe ids de detalle
 const nomProd    = x => x?.producto?.nombre ?? x?.nombre ?? ('Producto ' + idProd(x));
-const precioProd = x => x?.producto?.precio ?? x?.precio;
+const precioProd = x => x?.precioUnitario ?? x?.producto?.precio ?? x?.precio;
 const norm       = t => String(t ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');   // compara nombres sin depender de mayúsculas/guiones
 
 /* ================= CARGA ================= */
@@ -335,15 +356,15 @@ function pintarDetalle() {
 
 function pintarProductos() {
   const lista = detallesActual;
-  $('productos').innerHTML = lista.length ? lista.map(x => {
-    const id = idDetalle(x), cant = Number(x.cantidad) || 1, precio = precioProd(x);
+  $('productos').innerHTML = lista.length ? lista.map((x, i) => {
+    const cant = Number(x.cantidad) || 1, precio = precioProd(x);
     const sub = [
       precio != null ? `${esc(dinero(precio))} c/u · Subtotal ${esc(dinero(Number(precio) * cant))}` : '',
       x.notas ? `Notas: ${esc(x.notas)}` : ''
     ].filter(Boolean).join(' · ');
     return `<div class="prod">
       <div class="prod__info"><div><strong>${cant} ×</strong> ${esc(nomProd(x))}</div><div class="prod__sub">${sub}</div></div>
-      <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Eliminar</button>
+      <button class="btn btn--outline btn--sm" onclick="quitarProducto(${i})">Eliminar</button>
     </div>`;
   }).join('') : (Number(actual.precio_total) > 0
       ? '<div class="text-muted">El pedido tiene un total, pero no se pudo obtener la lista de productos (¿ya está disponible GET /pedido/productos/{id}?).</div>'
@@ -378,17 +399,25 @@ function pintarPedido() {
     <button class="btn btn--dark btn--sm" onclick="agregarProducto()">Añadir</button>`;
 }
 
-// GET /pedido/productos/{id}; si el endpoint aún no responde, se usa la lista que venga dentro del pedido
-async function cargarDetalles(id) {
-  detallesActual = [];
-  if (demo) return;
+// GET /pedido/productos/{id}. Devuelve la lista, [] si el pedido no tiene productos, o null si falló la consulta.
+async function pedirDetalles(id) {
+  if (demo) return [];
   try {
     const l = await api(CONFIG.rutas.productosPedido(id));
-    detallesActual = Array.isArray(l) ? l : productosDe(actual);
+    console.log('Productos del pedido (JSON):\n' + JSON.stringify(l, null, 2));
+    if (Array.isArray(l)) return l;
+    if (l == null || l === '') return [];   // respuesta vacía (204 / sin cuerpo) = sin productos
+    return null;
   } catch (e) {
-    console.warn('No se pudo consultar los productos del pedido; se usa el JSON del pedido', e);
-    detallesActual = productosDe(actual);
+    if (e.status === 404 || e.status === 204) return [];   // sin productos
+    console.warn('No se pudo consultar los productos del pedido', e);
+    return null;
   }
+}
+// Al abrir el pedido: si la consulta falla, se usa la lista que venga dentro del JSON del pedido
+async function cargarDetalles(id) {
+  const l = await pedirDetalles(id);
+  detallesActual = l ?? productosDe(actual);
 }
 
 async function cargarCatalogo() {
@@ -403,14 +432,19 @@ const actualizarIncidente  = (id, texto)    => api(CONFIG.rutas.incidente,  'PUT
 const actualizarMetodoPago = (id, idMetodo) => api(CONFIG.rutas.metodoPago, 'PUT', DTO.metodoPago(id, idMetodo));
 
 // Productos: tras añadir o eliminar se actualiza el pedido (total) y se vuelve a pedir la lista de detalles
-async function aplicarProductos(promesa, okMsg) {
+async function aplicarProductos(promesa, okMsg, quitadoId) {
   if (demo) return toast('Modo demo: no se envió nada');
   try {
     const p = await promesa;
     actual = (p && typeof p === 'object' && p.id_pedido != null) ? p : await api(CONFIG.rutas.pedido(actual.id_pedido));
-    await cargarDetalles(actual.id_pedido);
+    const nueva = await pedirDetalles(actual.id_pedido);
+    if (nueva) detallesActual = nueva;   // si la consulta falla, se conserva la lista actual
+    if (quitadoId != null) detallesActual = detallesActual.filter(d => idQuitar(d) !== quitadoId);   // lo quitado desaparece de la lista
     pintarDetalle(); pintarProductos(); toast(okMsg, 'success'); cargarTodo();
-  } catch (e) { console.error(e); toast('No se pudo actualizar los productos', 'danger'); }
+  } catch (e) {
+    console.error('Productos:', e.status, e.cuerpo, e);
+    toast(e.status === 403 ? 'Sin permiso para modificar los productos (403)' : 'No se pudo actualizar los productos' + (e.status ? ' (error ' + e.status + ')' : ''), 'danger');
+  }
 }
 function agregarProducto() {
   const idProducto = Number($('prodSel').value);
@@ -422,10 +456,17 @@ function agregarProducto() {
     demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.item(idProducto, cantidad, notas)]),
     'Producto añadido');
 }
-function quitarProducto(idProducto) {
+function quitarProducto(i) {
+  const x = detallesActual[i];
+  const id = idQuitar(x);
+  if (id == null) {
+    console.warn('El producto no trae ningún id en la lista:', x);
+    return toast('Este producto no trae un id en la lista. Revisa la consola (F12).', 'danger');
+  }
+  console.log('Quitar productos del pedido', actual.id_pedido, 'ids enviados:', [id]);
   aplicarProductos(
-    demo ? null : api(CONFIG.rutas.quitarProductos(actual.id_pedido), 'PUT', [idProducto]),
-    'Producto quitado');
+    demo ? null : api(CONFIG.rutas.quitarProductos(actual.id_pedido), 'PUT', [id]),
+    'Producto quitado', id);
 }
 
 // Mesa, método de pago e incidente: solo se envía lo que cambió, cada uno a su endpoint y en orden
