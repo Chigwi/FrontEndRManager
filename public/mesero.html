@@ -22,6 +22,7 @@
   .prod__sub { font-size:.82rem; color:var(--gray-500); }
   .prod-add { display:flex; gap:.5rem; align-items:center; }
   .prod-add .input, .prod-add .select { flex:1; min-width:0; }
+  .prod-add .cant { flex:0 0 84px; }
   @media (max-width:560px){ .main--full{ padding:1.25rem; } .prod-add{ flex-wrap:wrap; } }
 </style>
 </head>
@@ -128,7 +129,8 @@ const CONFIG = {
     metodoPago:        '/api/ordenes/pedido/metodoDePago',              // PUT  -> PedidoUpdateMetodoDePagoDTO
     agregarProductos:  id => `/api/ordenes/pedido/productos/add/${id}`,    // PUT -> [Detalle_producto]  (devuelve Pedido)
     quitarProductos:   id => `/api/ordenes/pedido/productos/remove/${id}`, // PUT -> [Long]              (devuelve Pedido)
-    catalogo:          '/api/menu/productos'                            // GET  -> [{id, nombre}]  (AJUSTAR a tu ruta real del menú)
+    catalogo:          '/api/menu',                                     // GET  -> [Producto]
+    productosPedido:   id => `/api/ordenes/pedido/productos/${id}`      // GET  -> [{ id_detalle_producto, cantidad, producto:{...}, notas }]  (en desarrollo en el backend)
   },
   // ids según PedidoService.updateMetodoDePago: 1 Efectivo, 2 Tarjeta, 3 BREB
   metodos: [{ id: 1, nombre: 'Efectivo' }, { id: 2, nombre: 'Tarjeta' }, { id: 3, nombre: 'Bre-B' }]
@@ -140,8 +142,8 @@ const DTO = {
   mesa:        (idPedido, idMesa) => ({ id: idPedido, idmesa: idMesa }),  // PedidoUpdateMesaDTO (supuesto)
   incidente:   (id, incidente)      => ({ id, incidente }),               // según la guía
   metodoPago:  (idPedido, idMetodo) => ({ idPedido, idMetodo }),          // según la guía
-  // Detalle_producto { id_detalle_producto, producto, notas, pedido }: el producto va anidado; no hay campo cantidad
-  detalle:     (idProducto, notas)  => ({ producto: { id_producto: idProducto }, notas: notas || null })
+  // ItemRequestDTO { idProducto, cantidad, notas }
+  item:        (idProducto, cantidad, notas) => ({ idProducto, cantidad, notas: notas || null })
 };
 
 /* ================= DATOS DEMO ================= */
@@ -155,7 +157,7 @@ const DEMO = {
     precio_total: null, metodo_de_pago: 'Tarjeta'
   }]
 };
-let demo = false, actual = null, vista = 'pedidos', pedidos = [], mesas = [], catalogo = null;
+let demo = false, actual = null, vista = 'pedidos', pedidos = [], mesas = [], catalogo = null, detallesActual = [];
 
 /* ================= UTILIDADES ================= */
 const $ = id => document.getElementById(id);
@@ -293,9 +295,10 @@ async function verPedido(id) {
   try { actual = demo ? pedidos.find(p => p.id_pedido === id) : await api(CONFIG.rutas.pedido(id)); }
   catch (e) { console.error(e); return toast('No se pudo cargar el pedido ' + id, 'danger'); }
   if (!actual) return toast('No se encontró el pedido ' + id, 'danger');
-  console.log('Pedido recibido:', actual);   // revisar aquí cómo llegan los productos
+  console.log('Pedido recibido (JSON):\n' + JSON.stringify(actual, null, 2));   // se ve completo sin desplegar
   await cargarCatalogo();
   await refrescarIncidente(id);
+  await cargarDetalles(id);
   pintarPedido();
   abrir('mPedido');
 }
@@ -311,16 +314,19 @@ function pintarDetalle() {
 }
 
 function pintarProductos() {
-  const lista = productosDe(actual);
+  const lista = detallesActual;
   $('productos').innerHTML = lista.length ? lista.map(x => {
-    const id = idDetalle(x);
-    const cant = [precioProd(x) != null ? esc(dinero(precioProd(x))) : '', x.notas ? `Notas: ${esc(x.notas)}` : ''].filter(Boolean).join(' · ');
+    const id = idDetalle(x), cant = Number(x.cantidad) || 1, precio = precioProd(x);
+    const sub = [
+      precio != null ? `${esc(dinero(precio))} c/u · Subtotal ${esc(dinero(Number(precio) * cant))}` : '',
+      x.notas ? `Notas: ${esc(x.notas)}` : ''
+    ].filter(Boolean).join(' · ');
     return `<div class="prod">
-      <div class="prod__info"><div>${esc(nomProd(x))}</div><div class="prod__sub">${cant}</div></div>
+      <div class="prod__info"><div><strong>${cant} ×</strong> ${esc(nomProd(x))}</div><div class="prod__sub">${sub}</div></div>
       <button class="btn btn--outline btn--sm" ${id == null ? 'disabled' : `onclick="quitarProducto(${Number(id)})"`}>Eliminar</button>
     </div>`;
   }).join('') : (Number(actual.precio_total) > 0
-      ? '<div class="text-muted">El pedido tiene un total, pero el servidor no devolvió la lista de productos (revisa la consola, F12).</div>'
+      ? '<div class="text-muted">El pedido tiene un total, pero no se pudo obtener la lista de productos (¿ya está disponible GET /pedido/productos/{id}?).</div>'
       : '<div class="text-muted">Este pedido aún no tiene productos.</div>');
 }
 
@@ -340,13 +346,29 @@ function pintarPedido() {
       ? 'No se pudo consultar el incidente. Solo se admite uno por pedido; si ya existe, el servidor rechazará añadir otro.'
       : 'Solo se puede registrar un incidente por pedido; después no podrá editarse.';
   pintarProductos();
-  // selector de producto: del catálogo si cargó, si no, por id
+  // selector por nombre (catálogo de GET /api/menu); si no cargó, se pide el id
   const selector = catalogo && catalogo.length
-    ? `<select class="select" id="prodSel">${catalogo.map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}${precioProd(c) != null ? ' · ' + esc(dinero(precioProd(c))) : ''}</option>`).join('')}</select>`
+    ? `<select class="select" id="prodSel"><option value="">Selecciona un producto…</option>${
+        [...catalogo].sort((a, b) => String(nomProd(a)).localeCompare(String(nomProd(b)), 'es'))
+          .map(c => `<option value="${esc(idProd(c))}">${esc(nomProd(c))}${precioProd(c) != null ? ' · ' + esc(dinero(precioProd(c))) : ''}</option>`).join('')}</select>`
     : `<input class="input" id="prodSel" type="number" min="1" placeholder="ID del producto">`;
   $('addProd').innerHTML = `${selector}
+    <input class="input cant" id="prodCant" type="number" min="1" step="1" value="1" aria-label="Cantidad">
     <input class="input" id="prodNotas" type="text" maxlength="200" placeholder="Notas (opcional)" aria-label="Notas">
     <button class="btn btn--dark btn--sm" onclick="agregarProducto()">Añadir</button>`;
+}
+
+// GET /pedido/productos/{id}; si el endpoint aún no responde, se usa la lista que venga dentro del pedido
+async function cargarDetalles(id) {
+  detallesActual = [];
+  if (demo) return;
+  try {
+    const l = await api(CONFIG.rutas.productosPedido(id));
+    detallesActual = Array.isArray(l) ? l : productosDe(actual);
+  } catch (e) {
+    console.warn('No se pudo consultar los productos del pedido; se usa el JSON del pedido', e);
+    detallesActual = productosDe(actual);
+  }
 }
 
 async function cargarCatalogo() {
@@ -360,20 +382,24 @@ const actualizarMesa       = (id, idMesa)   => api(CONFIG.rutas.mesa,       'PUT
 const actualizarIncidente  = (id, texto)    => api(CONFIG.rutas.incidente,  'PUT', DTO.incidente(id, texto));
 const actualizarMetodoPago = (id, idMetodo) => api(CONFIG.rutas.metodoPago, 'PUT', DTO.metodoPago(id, idMetodo));
 
-// Productos: el backend devuelve el Pedido actualizado
+// Productos: tras añadir o eliminar se actualiza el pedido (total) y se vuelve a pedir la lista de detalles
 async function aplicarProductos(promesa, okMsg) {
   if (demo) return toast('Modo demo: no se envió nada');
   try {
     const p = await promesa;
-    if (p && typeof p === 'object') actual = p; else actual = await api(CONFIG.rutas.pedido(actual.id_pedido));
+    actual = (p && typeof p === 'object' && p.id_pedido != null) ? p : await api(CONFIG.rutas.pedido(actual.id_pedido));
+    await cargarDetalles(actual.id_pedido);
     pintarDetalle(); pintarProductos(); toast(okMsg, 'success'); cargarTodo();
   } catch (e) { console.error(e); toast('No se pudo actualizar los productos', 'danger'); }
 }
 function agregarProducto() {
-  const idProducto = Number($('prodSel').value), notas = $('prodNotas').value.trim();
+  const idProducto = Number($('prodSel').value);
+  const cantidad = Math.floor(Number($('prodCant').value));
+  const notas = $('prodNotas').value.trim();
   if (!idProducto) return toast('Elige un producto', 'danger');
+  if (!(cantidad >= 1)) return toast('La cantidad debe ser al menos 1', 'danger');
   aplicarProductos(
-    demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.detalle(idProducto, notas)]),
+    demo ? null : api(CONFIG.rutas.agregarProductos(actual.id_pedido), 'PUT', [DTO.item(idProducto, cantidad, notas)]),
     'Producto añadido');
 }
 function quitarProducto(idProducto) {
