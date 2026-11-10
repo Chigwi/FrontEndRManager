@@ -9,10 +9,8 @@
   // Pantalla de inicio según el rol. Cambia aquí el destino de cada uno.
   var ROLE_HOME = {
     admin:    'admin.html',
-    gerente:  'menu.html',
-    mesero:   'menu.html',
+    mesero:   'mesero.html',
     cocinero: 'cocinero.html',
-    cajero:   'menu.html'
   };
   var DEFAULT_HOME = 'menu.html'; // para cualquier rol que no esté en la lista
   var DURATION_MS = 8 * 60 * 60 * 1000; // la sesión dura 8 horas
