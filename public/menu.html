@@ -133,6 +133,7 @@
 <main class="menu-wrap">
   <div class="page-header">
     <div><h1>Menú</h1><div class="text-muted">Toca un producto para ver el detalle</div></div>
+    <a class="btn btn--outline" id="btnVolver" href="mesero.html">&larr; Volver a mesero</a>
   </div>
 
   <div id="alerta"></div>
@@ -653,6 +654,10 @@ $('dMenos').addEventListener('click', () => { if (cantidadDetalle > 1) { cantida
 $('dMas').addEventListener('click', () => { if (cantidadDetalle < 99) { cantidadDetalle++; pintarCantidad(); } });
 $('dAgregar').addEventListener('click', agregarAlPedido);
 $('btnPedido').addEventListener('click', abrirPedido);
+$('btnVolver').addEventListener('click', e => {
+  // Evita perder sin querer productos que aún no se han enviado al pedido
+  if (carrito.size && !confirm('Tienes productos sin enviar al pedido. ¿Volver de todas formas?')) e.preventDefault();
+});
 $('pCerrar').addEventListener('click', cerrarPedido);
 $('pVaciar').addEventListener('click', () => { carrito.clear(); actualizarContador(); pintarPedido(); });
 $('pEnviar').addEventListener('click', enviarPedido);
